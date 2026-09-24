@@ -13,7 +13,7 @@ import os
 # --- Target Maneuver Settings ---
 TARGET_POS_X = 1.0
 TARGET_POS_Y = 0.5
-TARGET_POS_Z_START = 0.05
+TARGET_POS_Z_START = 1.0
 TARGET_POS_Z_END = 1.5
 TARGET_PITCH_DEG = 0.0
 TARGET_ROLL_DEG = 0.0
@@ -53,7 +53,7 @@ def init_worker(xml_path):
     drone_config["motor_tau"] = motor_tau
     
     drone_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "drone")
-    drone_pos = data.xpos[drone_body_id]
+    drone_pos = data.xipos[drone_body_id]
     
     num_motors = model.nu
     motors = []
@@ -257,13 +257,13 @@ def evaluate_flight(params):
             ang_vel_err = target_ang_vel - ang_vel
             
             integral_error_z += pos_err[2] * dt
-            integral_error_z = np.clip(integral_error_z, -2.0, 2.0)
+            integral_error_z = np.clip(integral_error_z, -100.0, 100.0)
             
             desired_accel_z = Kp[0] * pos_err[2] + Ki[0] * integral_error_z + Kd[0] * vel_err[2]
             desired_force_z = (desired_accel_z + 9.81) * mass
             
             integral_error_ang += ang_err * dt
-            integral_error_ang = np.clip(integral_error_ang, -2.0, 2.0)
+            integral_error_ang = np.clip(integral_error_ang, -100.0, 100.0)
             
             desired_ang_accel = Kp[1:] * ang_err + Ki[1:] * integral_error_ang + Kd[1:] * ang_vel_err
             
