@@ -9,6 +9,7 @@ import json
 import multiprocessing
 import time
 import os
+import re
 
 # --- Target Maneuver Settings ---
 TARGET_POS_X = 1.0
@@ -34,7 +35,17 @@ def init_worker(xml_path):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
     
     try:
-        model = mujoco.MjModel.from_xml_path(xml_path)
+        xml_content = open(xml_path, "r", encoding="utf-8").read()
+        if xml_path.endswith('.sdf'):
+            import re
+            match = re.search(r'<mujoco_xml>(.*?)</mujoco_xml>', xml_content, re.DOTALL)
+            if not match:
+                print("Error: No embedded <mujoco_xml> found in SDF file.")
+                sys.exit(1)
+            mjcf_string = match.group(1).strip()
+            model = mujoco.MjModel.from_xml_string(mjcf_string)
+        else:
+            model = mujoco.MjModel.from_xml_string(xml_content)
     except ValueError as e:
         print(f"Error loading model: {e}")
         sys.exit(1)
@@ -93,11 +104,45 @@ def init_worker(xml_path):
         B_full[0:3, i] = force
         B_full[3:6, i] = torque
 
+        # Parse prop inertia from the motor mount body
+        mount_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, f"motor_mount_{i}")
+        prop_inertia = 0.0
+        if mount_id != -1:
+            prop_inertia = np.max(model.body_inertia[mount_id])
+            
+        # Parse Performance Data
+        rpms = []
+        thrusts = []
+        try:
+            match = re.search(r'<!--\s*Motor\s*' + str(i) + r':.*?\[Data:\s*(.*?)\s*Unit:\s*([^\]]+)\].*?-->', xml_content, re.IGNORECASE)
+            if match:
+                data_str = match.group(1)
+                unit_str = match.group(2).strip()
+                if data_str.strip().lower() != "none":
+                    for point in data_str.split(';'):
+                        parts = point.strip().replace(',', ' ').split()
+                        if len(parts) >= 2:
+                            try:
+                                rpm_val = float(parts[0])
+                                thrust_val = float(parts[1])
+                                if unit_str == 'gf': thrust_val *= 0.00980665
+                                elif unit_str == 'kgf': thrust_val *= 9.80665
+                                rpms.append(rpm_val)
+                                thrusts.append(thrust_val)
+                            except ValueError:
+                                pass
+        except Exception:
+            pass
+
         motors.append({
             "name": act_name,
             "pos": pos_rel.tolist(),
             "z_axis": z_axis.tolist(),
-            "c_m": c_m
+            "c_m": c_m,
+            "spin": 1 if c_m > 0 else -1,
+            "inertia": prop_inertia,
+            "rpms": rpms,
+            "thrusts": thrusts
         })
 
     active_dofs = np.where(dof_mask == 1)[0]
@@ -132,8 +177,10 @@ def evaluate_flight(params):
     mixer = B_pinv
     total_loss = 0.0
     dt = model.opt.timestep
-    steps = int(5.0 / dt) 
     
+    num_id_dur = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_NUMERIC, "sim_duration_s")
+    sim_duration_s = model.numeric_data[model.numeric_adr[num_id_dur]] if num_id_dur != -1 else 5.0
+    steps = int(sim_duration_s / dt) 
     delay_steps = int((drone_config["transport_delay_ms"] / 1000.0) / dt)
     delay_steps = max(1, delay_steps)
     alpha_motor = dt / (drone_config["motor_tau"] + dt)
@@ -169,6 +216,11 @@ def evaluate_flight(params):
         integral_error_body_x = 0.0
         integral_error_body_y = 0.0
         prev_thrusts = np.zeros(num_motors)
+        
+        prev_rpms = np.zeros(num_motors)
+        for i in range(num_motors):
+            if len(motors[i]["rpms"]) >= 2:
+                prev_rpms[i] = motors[i]["rpms"][0]
         
         base_thrusts = mixer @ np.array([mass * 9.81, 0.0, 0.0, 0.0])
         safe_max_thrusts = max_thrusts + 1e-6
@@ -328,6 +380,27 @@ def evaluate_flight(params):
             physical_thrusts = np.sign(actual_motor_pwm_arr) * (actual_motor_pwm_arr ** 2) * max_thrusts
             
             data.ctrl[:] = physical_thrusts
+            
+            # Simulate RPM transient torque (RPM jerk)
+            transient_torque_z = 0.0
+            for i in range(num_motors):
+                m = motors[i]
+                if m["inertia"] > 0 and len(m["rpms"]) >= 2:
+                    # np.interp requires strictly increasing x, thrusts array from XML should be increasing
+                    current_rpm = np.interp(abs(physical_thrusts[i]), m["thrusts"], m["rpms"])
+                    rpm_diff = current_rpm - prev_rpms[i]
+                    prev_rpms[i] = current_rpm
+                    
+                    alpha = (rpm_diff * 2.0 * np.pi / 60.0) / dt
+                    # T = - I * alpha * spin (CW is -1, CCW is +1)
+                    t_jerk = - m["inertia"] * alpha * m["spin"]
+                    transient_torque_z += t_jerk
+                    
+            if transient_torque_z != 0.0:
+                body_mat = data.xmat[drone_body_id].reshape(3, 3)
+                z_axis_world = body_mat @ np.array([0.0, 0.0, 1.0])
+                data.xfrc_applied[drone_body_id, 3:6] = z_axis_world * transient_torque_z
+                
             mujoco.mj_step(model, data)
             
             loss += (np.sum(pos_err[:2]**2)*10.0 + pos_err[2]**2 + np.sum(ang_err**2) * 20.0 + np.sum(ang_vel_err**2) * 2.0) * dt
@@ -371,11 +444,11 @@ def main():
     bounds_lower = [0.0] * 24
     
     bounds_upper = [
-        100.0, 100.0, 100.0, 100.0,  
-        10.0, 10.0, 10.0, 10.0,          
-        30.0, 30.0, 30.0, 30.0,      
-        10.0, 5.0, 10.0, 10.0, 5.0, 10.0,
-        100.0, 100.0, 100.0, 100.0, 20.0, 20.0
+        300.0, 300.0, 300.0, 300.0,  # Kp
+        50.0, 50.0, 50.0, 50.0,      # Ki
+        150.0, 150.0, 150.0, 150.0,  # Kd
+        30.0, 20.0, 30.0, 30.0, 20.0, 30.0, # Outer Kp, Ki, Kd
+        300.0, 300.0, 300.0, 300.0, 100.0, 100.0 # max_int
     ]
     
     options = {

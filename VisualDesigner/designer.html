@@ -59,6 +59,7 @@
             box-shadow: 0 0 40px rgba(0,0,0,0.5);
             border: 1px solid var(--border-color);
             cursor: crosshair;
+            display: block;
         }
 
         h1, h2, h3 {
@@ -200,20 +201,20 @@
         </div>
 
         <div class="form-group">
-            <label>Core Dimensions (X, Y, Z meters)</label>
+            <label>Core Dimensions (X, Y, Z mm)</label>
             <div class="row">
-                <input type="number" id="g_size_x" value="0.06" step="0.01">
-                <input type="number" id="g_size_y" value="0.04" step="0.01">
-                <input type="number" id="g_size_z" value="0.02" step="0.01">
+                <input type="number" id="g_size_x" value="60" step="1">
+                <input type="number" id="g_size_y" value="40" step="1">
+                <input type="number" id="g_size_z" value="20" step="1">
             </div>
         </div>
         
         <div class="form-group">
-            <label>Center of Mass Override (X, Y, Z)</label>
+            <label>Center of Mass Override (X, Y, Z mm)</label>
             <div class="row">
-                <input type="number" id="g_com_x" value="0.0" step="0.01">
-                <input type="number" id="g_com_y" value="0.0" step="0.01">
-                <input type="number" id="g_com_z" value="0.0" step="0.01">
+                <input type="number" id="g_com_x" value="0" step="1">
+                <input type="number" id="g_com_y" value="0" step="1">
+                <input type="number" id="g_com_z" value="0" step="1">
             </div>
             <label style="font-size: 0.7rem; margin-top: 4px;">Leave at 0,0,0 to let MuJoCo auto-compute, or override it to force an unbalanced drone.</label>
         </div>
@@ -223,12 +224,38 @@
             <input type="text" id="g_dof" value="0 0 1 1 1 1">
         </div>
 
-        <button onclick="exportXML()" style="margin-top: auto; padding: 14px; font-size: 1rem;">Export XML</button>
+        <div class="form-group">
+            <label>Transport Delay (ms)</label>
+            <input type="number" id="g_delay" value="10.0" step="1.0">
+        </div>
+        
+        <div class="form-group">
+            <label>Motor Time Constant &tau; (s)</label>
+            <input type="number" id="g_tau" value="0.015" step="0.001">
+        </div>
+        
+        <div class="form-group">
+            <label>Simulation Flight Time (s)</label>
+            <input type="number" id="g_sim_time" value="5.0" step="1.0">
+            <label style="font-size: 0.7rem; margin-top: 4px;">Larger drones need more time (e.g. 10s) to stabilize during optimization.</label>
+        </div>
+        
+        <div class="form-group">
+            <label>SDF / PX4 Sensors</label>
+            <div style="display: flex; gap: 10px; font-size: 0.9rem;">
+                <label><input type="checkbox" id="g_sensor_imu" checked> IMU</label>
+                <label><input type="checkbox" id="g_sensor_baro" checked> Barometer</label>
+                <label><input type="checkbox" id="g_sensor_mag" checked> Mag</label>
+                <label><input type="checkbox" id="g_sensor_gps" checked> GPS</label>
+            </div>
+        </div>
+
+        <button onclick="exportSDF()" style="margin-top: auto; padding: 14px; font-size: 1rem;">Export SDF</button>
     </div>
 
     <!-- Center: Canvas -->
     <div class="canvas-container" id="canvas-container">
-        <canvas id="designer" width="800" height="800"></canvas>
+        <canvas id="designer"></canvas>
     </div>
 
     <!-- Right Panel: Motor Settings -->
@@ -240,10 +267,10 @@
             <h2>Selected Motor</h2>
             
             <div class="form-group">
-                <label>Position (X, Y) [Drag on canvas]</label>
+                <label>Position (X, Y mm) [Drag on canvas]</label>
                 <div class="row">
-                    <input type="number" id="m_x" step="0.01" onchange="updateMotor()">
-                    <input type="number" id="m_y" step="0.01" onchange="updateMotor()">
+                    <input type="number" id="m_x" step="1" onchange="updateMotor()">
+                    <input type="number" id="m_y" step="1" onchange="updateMotor()">
                 </div>
             </div>
             
@@ -257,9 +284,32 @@
                 <input type="number" id="m_force" value="12" step="0.5" onchange="updateMotor()">
             </div>
             
+            <div class="form-group" style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px;">
+                <label>Performance Data (RPM, Thrust, Torque)</label>
+                <div class="row" style="margin-bottom: 8px;">
+                    <select id="m_thrust_unit" onchange="updateMotor()">
+                        <option value="gf">Grams-force (gf)</option>
+                        <option value="kgf">Kg-force (kgf)</option>
+                        <option value="N">Newtons (N)</option>
+                    </select>
+                    <select id="m_torque_unit" onchange="updateMotor()">
+                        <option value="Nm">Nm</option>
+                        <option value="Ncm">Ncm</option>
+                    </select>
+                </div>
+                <textarea id="m_perf_data" rows="6" placeholder="Format (space or comma separated):&#10;RPM Thrust Torque&#10;3400 13.27 0.01&#10;3800 16.72 0.015" onchange="updateMotor()" style="width: 100%; background: rgba(0,0,0,0.4); border: 1px solid var(--border-color); color: white; padding: 8px; border-radius: 4px; font-family: monospace; resize: vertical;"></textarea>
+                <button onclick="autoCalcFromData()" style="margin-top: 8px; font-size: 0.8rem; padding: 6px;">Auto-Calc Max Force & Drag</button>
+            </div>
+            
             <div class="form-group">
                 <label>Yaw Drag Torque</label>
                 <input type="number" id="m_drag" value="0.015" step="0.001" onchange="updateMotor()">
+            </div>
+            
+            <div class="form-group">
+                <label>Prop Mass (g)</label>
+                <input type="number" id="m_prop_mass" value="3" step="0.1" onchange="updateMotor()">
+                <label style="font-size: 0.7rem; margin-top: 4px;">Used for accurate rotational inertia calculation.</label>
             </div>
 
             <div class="form-group">
@@ -278,6 +328,7 @@
                 </div>
             </div>
 
+            <button onclick="applyToAllMotors()" style="margin-top: 10px; background: rgba(59, 130, 246, 0.2); border: 1px solid var(--accent); color: var(--accent);">Apply Specs to All</button>
             <button class="danger" onclick="deleteMotor()" style="margin-top: 10px;">Delete Motor</button>
         </div>
 
@@ -292,13 +343,22 @@
     <script>
         const canvas = document.getElementById('designer');
         const ctx = canvas.getContext('2d');
-        const pixelsPerMeter = 2000; // 1 meter = 2000 pixels (since drones are small)
+        const container = document.getElementById('canvas-container');
+
+        function resizeCanvas() {
+            canvas.width = container.clientWidth - 40;
+            canvas.height = container.clientHeight - 40;
+            draw();
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        let pixelsPerMeter = 2000;
         
         let motors = [
-            { id: 1, x: 0.08, y: 0.08, prop: 5, force: 12, drag: 0.015, spin: 'CCW', cant_r: 0, cant_p: 0 },
-            { id: 2, x: 0.08, y: -0.08, prop: 5, force: 12, drag: 0.015, spin: 'CW', cant_r: 0, cant_p: 0 },
-            { id: 3, x: -0.08, y: 0.08, prop: 5, force: 12, drag: 0.015, spin: 'CW', cant_r: 0, cant_p: 0 },
-            { id: 4, x: -0.08, y: -0.08, prop: 5, force: 12, drag: 0.015, spin: 'CCW', cant_r: 0, cant_p: 0 }
+            { id: 1, x: 80, y: 80, prop: 5, force: 12, perf_data: "", thrust_unit: "gf", torque_unit: "Nm", drag: 0.015, prop_mass: 3.0, spin: 'CCW', cant_r: 0, cant_p: 0 },
+            { id: 2, x: 80, y: -80, prop: 5, force: 12, perf_data: "", thrust_unit: "gf", torque_unit: "Nm", drag: 0.015, prop_mass: 3.0, spin: 'CW', cant_r: 0, cant_p: 0 },
+            { id: 3, x: -80, y: 80, prop: 5, force: 12, perf_data: "", thrust_unit: "gf", torque_unit: "Nm", drag: 0.015, prop_mass: 3.0, spin: 'CW', cant_r: 0, cant_p: 0 },
+            { id: 4, x: -80, y: -80, prop: 5, force: 12, perf_data: "", thrust_unit: "gf", torque_unit: "Nm", drag: 0.015, prop_mass: 3.0, spin: 'CCW', cant_r: 0, cant_p: 0 }
         ];
         
         let selectedMotorId = null;
@@ -330,8 +390,8 @@
             ctx.fillText('+Y (Left)', 10, cy - 10);
 
             // Draw Core
-            const cx_size = parseFloat(document.getElementById('g_size_x').value) * pixelsPerMeter;
-            const cy_size = parseFloat(document.getElementById('g_size_y').value) * pixelsPerMeter;
+            const cx_size = (parseFloat(document.getElementById('g_size_x').value) / 1000) * pixelsPerMeter;
+            const cy_size = (parseFloat(document.getElementById('g_size_y').value) / 1000) * pixelsPerMeter;
             ctx.fillStyle = 'rgba(59, 130, 246, 0.4)';
             ctx.strokeStyle = '#3b82f6';
             ctx.lineWidth = 2;
@@ -341,8 +401,8 @@
             ctx.strokeRect(cx - cy_size, cy - cx_size, cy_size*2, cx_size*2);
 
             // Draw Center of Mass override if not 0
-            const comX = parseFloat(document.getElementById('g_com_x').value);
-            const comY = parseFloat(document.getElementById('g_com_y').value);
+            const comX = parseFloat(document.getElementById('g_com_x').value) / 1000;
+            const comY = parseFloat(document.getElementById('g_com_y').value) / 1000;
             if (comX !== 0 || comY !== 0) {
                 ctx.fillStyle = '#ef4444';
                 ctx.beginPath();
@@ -352,8 +412,8 @@
 
             // Draw Motors
             motors.forEach(m => {
-                const drawX = cx - m.y * pixelsPerMeter;
-                const drawY = cy - m.x * pixelsPerMeter;
+                const drawX = cx - (m.y / 1000) * pixelsPerMeter;
+                const drawY = cy - (m.x / 1000) * pixelsPerMeter;
                 
                 // Draw Arm
                 ctx.beginPath();
@@ -407,20 +467,31 @@
             const cx = canvas.width / 2;
             const cy = canvas.height / 2;
             
-            // Unmap: drawX = cx - y*PPM => y = (cx - drawX)/PPM
-            // drawY = cy - x*PPM => x = (cy - drawY)/PPM
+            // Unmap: drawX = cx - (y/1000)*PPM => y = (cx - drawX)/PPM * 1000
+            // drawY = cy - (x/1000)*PPM => x = (cy - drawY)/PPM * 1000
             return {
-                x: (cy - py) / pixelsPerMeter,
-                y: (cx - px) / pixelsPerMeter
+                x: ((cy - py) / pixelsPerMeter) * 1000,
+                y: ((cx - px) / pixelsPerMeter) * 1000
             };
         }
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomFactor = 1.1;
+            if (e.deltaY < 0) {
+                pixelsPerMeter *= zoomFactor;
+            } else {
+                pixelsPerMeter /= zoomFactor;
+            }
+            draw();
+        });
 
         canvas.addEventListener('mousedown', (e) => {
             const pos = getMousePos(e);
             // Find clicked motor
             let clicked = null;
             for(let m of motors) {
-                const propR = (m.prop * 0.0254 / 2);
+                const propR = (m.prop * 0.0254 / 2) * 1000; // in mm
                 const dist = Math.hypot(m.x - pos.x, m.y - pos.y);
                 if (dist <= propR) {
                     clicked = m;
@@ -440,8 +511,8 @@
             if (isDragging && selectedMotorId) {
                 const pos = getMousePos(e);
                 const m = motors.find(x => x.id === selectedMotorId);
-                m.x = parseFloat(pos.x.toFixed(3));
-                m.y = parseFloat(pos.y.toFixed(3));
+                m.x = Math.round(pos.x);
+                m.y = Math.round(pos.y);
                 populateMotorForm();
                 draw();
             }
@@ -454,7 +525,7 @@
         function addMotor() {
             motors.push({
                 id: nextId++,
-                x: 0.1, y: 0.1, prop: 5, force: 12, drag: 0.015, spin: 'CW', cant_r: 0, cant_p: 0
+                x: 100, y: 100, prop: 5, force: 12, perf_data: "", thrust_unit: "gf", torque_unit: "Nm", drag: 0.015, prop_mass: 3.0, spin: 'CW', cant_r: 0, cant_p: 0
             });
             selectMotor(nextId - 1);
         }
@@ -485,7 +556,11 @@
             document.getElementById('m_y').value = m.y;
             document.getElementById('m_prop').value = m.prop;
             document.getElementById('m_force').value = m.force;
+            document.getElementById('m_perf_data').value = m.perf_data || "";
+            document.getElementById('m_thrust_unit').value = m.thrust_unit || "gf";
+            document.getElementById('m_torque_unit').value = m.torque_unit || "Nm";
             document.getElementById('m_drag').value = m.drag;
+            document.getElementById('m_prop_mass').value = m.prop_mass || 3.0;
             document.getElementById('m_spin').value = m.spin;
             document.getElementById('m_cant_r').value = m.cant_r;
             document.getElementById('m_cant_p').value = m.cant_p;
@@ -498,11 +573,73 @@
             m.y = parseFloat(document.getElementById('m_y').value);
             m.prop = parseFloat(document.getElementById('m_prop').value);
             m.force = parseFloat(document.getElementById('m_force').value);
+            m.perf_data = document.getElementById('m_perf_data').value;
+            m.thrust_unit = document.getElementById('m_thrust_unit').value;
+            m.torque_unit = document.getElementById('m_torque_unit').value;
             m.drag = parseFloat(document.getElementById('m_drag').value);
+            m.prop_mass = parseFloat(document.getElementById('m_prop_mass').value);
             m.spin = document.getElementById('m_spin').value;
             m.cant_r = parseFloat(document.getElementById('m_cant_r').value);
             m.cant_p = parseFloat(document.getElementById('m_cant_p').value);
             draw();
+        }
+
+        function autoCalcFromData() {
+            const m = motors.find(x => x.id === selectedMotorId);
+            if (!m || !m.perf_data) return;
+            
+            const lines = m.perf_data.trim().split('\n');
+            let maxThrustN = 0;
+            let dragRatios = [];
+            
+            for(let line of lines) {
+                const parts = line.trim().split(/[\s,]+/).map(parseFloat);
+                if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                    let thrust = parts[1];
+                    if (m.thrust_unit === 'gf') thrust *= 0.00980665;
+                    if (m.thrust_unit === 'kgf') thrust *= 9.80665;
+                    
+                    if (thrust > maxThrustN) maxThrustN = thrust;
+                    
+                    if (parts.length >= 3 && !isNaN(parts[2])) {
+                        let torque = parts[2];
+                        if (m.torque_unit === 'Ncm') torque *= 0.01;
+                        if (thrust > 0) dragRatios.push(torque / thrust);
+                    }
+                }
+            }
+            
+            if (maxThrustN > 0) {
+                m.force = parseFloat(maxThrustN.toFixed(2));
+                document.getElementById('m_force').value = m.force;
+            }
+            if (dragRatios.length > 0) {
+                const avgDrag = dragRatios.reduce((a, b) => a + b, 0) / dragRatios.length;
+                m.drag = parseFloat(avgDrag.toFixed(5));
+                document.getElementById('m_drag').value = m.drag;
+            }
+            updateMotor();
+        }
+
+        function applyToAllMotors() {
+            const m = motors.find(x => x.id === selectedMotorId);
+            if (!m) return;
+            
+            motors.forEach(other => {
+                if (other.id !== m.id) {
+                    other.prop = m.prop;
+                    other.force = m.force;
+                    other.perf_data = m.perf_data;
+                    other.thrust_unit = m.thrust_unit;
+                    other.torque_unit = m.torque_unit;
+                    other.drag = m.drag;
+                    other.prop_mass = m.prop_mass;
+                    other.cant_r = m.cant_r;
+                    other.cant_p = m.cant_p;
+                }
+            });
+            draw();
+            updateMotorList();
         }
 
         function updateMotorList() {
@@ -517,18 +654,21 @@
             });
         }
 
-        // Export XML
-        function exportXML() {
+        // Export SDF
+        function exportSDF() {
             const name = document.getElementById('g_name').value || 'custom_drone';
             const mass = document.getElementById('g_mass').value;
-            const sx = document.getElementById('g_size_x').value;
-            const sy = document.getElementById('g_size_y').value;
-            const sz = document.getElementById('g_size_z').value;
+            const sx = parseFloat(document.getElementById('g_size_x').value) / 1000;
+            const sy = parseFloat(document.getElementById('g_size_y').value) / 1000;
+            const sz = parseFloat(document.getElementById('g_size_z').value) / 1000;
             
-            const cx = parseFloat(document.getElementById('g_com_x').value);
-            const cy = parseFloat(document.getElementById('g_com_y').value);
-            const cz = parseFloat(document.getElementById('g_com_z').value);
+            const cx = parseFloat(document.getElementById('g_com_x').value) / 1000;
+            const cy = parseFloat(document.getElementById('g_com_y').value) / 1000;
+            const cz = parseFloat(document.getElementById('g_com_z').value) / 1000;
             const dof = document.getElementById('g_dof').value;
+            const delay = document.getElementById('g_delay').value;
+            const tau = document.getElementById('g_tau').value;
+            const simTime = document.getElementById('g_sim_time').value;
 
             let inertial_tag = "";
             if (cx !== 0 || cy !== 0 || cz !== 0) {
@@ -536,13 +676,14 @@
                 inertial_tag = `<inertial pos="${cx} ${cy} ${cz}" mass="${mass}" diaginertia="0.003 0.003 0.005"/>`;
             }
 
-            let xml = `<mujoco model="${name}">
+            let mjcf = `<mujoco model="${name}">
     <compiler angle="degree" coordinate="local" eulerseq="xyz"/>
     <option timestep="0.002" gravity="0 0 -9.81"/>
     
     <custom>
-        <numeric name="transport_delay_ms" data="10.0"/>
-        <numeric name="motor_tau" data="0.015"/>
+        <numeric name="transport_delay_ms" data="${delay}"/>
+        <numeric name="motor_tau" data="${tau}"/>
+        <numeric name="sim_duration_s" data="${simTime}"/>
         <numeric name="dof_mask" data="${dof}"/>
     </custom>
     
@@ -558,32 +699,117 @@
 `;
 
             let actuators = `    <actuator>\n`;
+            
+            let sdf = `<sdf version="1.7">\n  <model name="${name}">\n`;
+            
+            // Build SDF base link
+            sdf += `    <link name="base_link">
+      <inertial>
+        <pose>${cx} ${cy} ${cz} 0 0 0</pose>
+        <mass>${mass}</mass>
+        <inertia><ixx>0.003</ixx><iyy>0.003</iyy><izz>0.005</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+      </inertial>
+      <visual name="core_vis">
+        <geometry><box><size>${sx*2} ${sy*2} ${sz*2}</size></box></geometry>
+        <material><ambient>0.2 0.3 0.8 1</ambient></material>
+      </visual>
+      <collision name="core_col">
+        <geometry><box><size>${sx*2} ${sy*2} ${sz*2}</size></box></geometry>
+      </collision>\n`;
+
+            if (document.getElementById('g_sensor_imu').checked) {
+                sdf += `      <sensor name="imu_sensor" type="imu">
+        <always_on>1</always_on>
+        <update_rate>250</update_rate>
+        <imu>
+          <angular_velocity>
+            <x><noise type="gaussian"><mean>0</mean><stddev>0.000186</stddev></noise></x>
+            <y><noise type="gaussian"><mean>0</mean><stddev>0.000186</stddev></noise></y>
+            <z><noise type="gaussian"><mean>0</mean><stddev>0.000186</stddev></noise></z>
+          </angular_velocity>
+          <linear_acceleration>
+            <x><noise type="gaussian"><mean>0</mean><stddev>0.00186</stddev></noise></x>
+            <y><noise type="gaussian"><mean>0</mean><stddev>0.00186</stddev></noise></y>
+            <z><noise type="gaussian"><mean>0</mean><stddev>0.00186</stddev></noise></z>
+          </linear_acceleration>
+        </imu>
+      </sensor>\n`;
+            }
+            if (document.getElementById('g_sensor_baro').checked) {
+                sdf += `      <sensor name="altimeter" type="altimeter">
+        <always_on>1</always_on>
+        <update_rate>50</update_rate>
+        <altimeter/>
+      </sensor>\n`;
+            }
+            if (document.getElementById('g_sensor_mag').checked) {
+                sdf += `      <sensor name="magnetometer" type="magnetometer">
+        <always_on>1</always_on>
+        <update_rate>100</update_rate>
+        <magnetometer/>
+      </sensor>\n`;
+            }
+            if (document.getElementById('g_sensor_gps').checked) {
+                sdf += `      <sensor name="gps" type="navsat">
+        <always_on>1</always_on>
+        <update_rate>10</update_rate>
+      </sensor>\n`;
+            }
+
+            sdf += `    </link>\n`;
 
             motors.forEach((m, i) => {
                 const propRadius = (m.prop * 0.0254) / 2.0;
-                const arm_mass = 0.02 * (Math.hypot(m.x, m.y) / 0.1);
-                const yaw_torque = m.spin === 'CW' ? -m.drag : m.drag;
+                const m_x_m = m.x / 1000;
+                const m_y_m = m.y / 1000;
                 
-                xml += `
-            <!-- Motor ${i}: ${m.prop}" ${m.spin} (Force: ${m.force}N, Cant: ${m.cant_r}, ${m.cant_p}) -->
+                const arm_mass = 0.02 * (Math.hypot(m_x_m, m_y_m) / 0.1);
+                const yaw_torque = m.spin === 'CW' ? -m.drag : m.drag;
+                const p_mass = (m.prop_mass || 3.0) / 1000;
+                const perf_data_attr = m.perf_data ? m.perf_data.replace(/\n/g, '; ') : "";
+                
+                // Add to MJCF
+                mjcf += `
+            <!-- Motor ${i}: ${m.prop}" ${m.spin} (Force: ${m.force}N, Cant: ${m.cant_r}, ${m.cant_p}) [Data: ${perf_data_attr || "none"} Unit: ${m.thrust_unit}] -->
             <body name="motor_assembly_${i}" pos="0 0 0">
-                <geom name="arm_${i}" type="capsule" fromto="0 0 0 ${m.x} ${m.y} 0" size="0.005" mass="${arm_mass.toFixed(3)}" rgba="0.5 0.5 0.5 1"/>
-                <body name="motor_mount_${i}" pos="${m.x} ${m.y} 0.005" euler="${m.cant_r} ${m.cant_p} 0">
+                <geom name="arm_${i}" type="capsule" fromto="0 0 0 ${m_x_m} ${m_y_m} 0" size="0.005" mass="${arm_mass.toFixed(3)}" rgba="0.5 0.5 0.5 1"/>
+                <body name="motor_mount_${i}" pos="${m_x_m} ${m_y_m} 0.005" euler="${m.cant_r} ${m.cant_p} 0">
                     <geom name="motor_bell_${i}" type="cylinder" size="0.015 0.005" mass="0.03" rgba="0.2 0.2 0.2 1"/>
+                    <geom name="prop_${i}" type="cylinder" pos="0 0 0.005" size="${propRadius.toFixed(3)} 0.002" mass="${p_mass.toFixed(4)}" rgba="0.1 0.1 0.1 0.3"/>
                     <site name="thruster_${i}" type="cylinder" pos="0 0 0.005" size="${propRadius.toFixed(3)} 0.002" rgba="${m.y > 0 ? "1 0 0 0.5" : "0 0 1 0.5"}"/>
                 </body>
             </body>\n`;
 
                 actuators += `        <general name="m_${i}" site="thruster_${i}" gear="0 0 1 0 0 ${yaw_torque.toFixed(4)}" ctrllimited="true" ctrlrange="0 ${m.force.toFixed(1)}"/>\n`;
+                
+                // Add to SDF
+                sdf += `    <link name="motor_${i}">
+      <pose>${m_x_m} ${m_y_m} 0.01 ${m.cant_r} ${m.cant_p} 0</pose>
+      <inertial>
+        <mass>${arm_mass + 0.03 + p_mass}</mass>
+        <inertia><ixx>0.0001</ixx><iyy>0.0001</iyy><izz>${p_mass * propRadius * propRadius * 0.5}</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+      </inertial>
+      <visual name="prop_${i}_vis">
+        <pose>0 0 0.005 0 0 0</pose>
+        <geometry><cylinder><radius>${propRadius.toFixed(3)}</radius><length>0.002</length></cylinder></geometry>
+        <material><ambient>0.1 0.1 0.1 0.8</ambient></material>
+      </visual>
+    </link>
+    <joint name="j_m_${i}" type="fixed">
+      <parent>base_link</parent>
+      <child>motor_${i}</child>
+    </joint>\n`;
             });
 
-            xml += `        </body>\n    </worldbody>\n\n${actuators}    </actuator>\n</mujoco>`;
+            mjcf += `        </body>\n    </worldbody>\n\n${actuators}    </actuator>\n</mujoco>`;
+
+            sdf += `    <plugin name="drone_optimizer_mjcf">\n      <mujoco_xml>\n${mjcf}\n      </mujoco_xml>\n    </plugin>\n  </model>\n</sdf>`;
 
             // Download
-            const blob = new Blob([xml], {type: "text/xml"});
+            const blob = new Blob([sdf], {type: "text/xml"});
             const a = document.createElement("a");
             a.href = URL.createObjectURL(blob);
-            a.download = `${name}.xml`;
+            a.download = `${name}.sdf`;
             a.click();
         }
 
@@ -593,7 +819,7 @@
         });
 
         // Initial draw
-        draw();
+        resizeCanvas();
     </script>
 </body>
 </html>

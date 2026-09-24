@@ -1,0 +1,186 @@
+<sdf version="1.7">
+  <model name="custom_drone">
+    <link name="base_link">
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>15</mass>
+        <inertia><ixx>0.003</ixx><iyy>0.003</iyy><izz>0.005</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+      </inertial>
+      <visual name="core_vis">
+        <geometry><box><size>0.6 0.4 0.2</size></box></geometry>
+        <material><ambient>0.2 0.3 0.8 1</ambient></material>
+      </visual>
+      <collision name="core_col">
+        <geometry><box><size>0.6 0.4 0.2</size></box></geometry>
+      </collision>
+      <sensor name="imu_sensor" type="imu">
+        <always_on>1</always_on>
+        <update_rate>250</update_rate>
+        <imu>
+          <angular_velocity>
+            <x><noise type="gaussian"><mean>0</mean><stddev>0.000186</stddev></noise></x>
+            <y><noise type="gaussian"><mean>0</mean><stddev>0.000186</stddev></noise></y>
+            <z><noise type="gaussian"><mean>0</mean><stddev>0.000186</stddev></noise></z>
+          </angular_velocity>
+          <linear_acceleration>
+            <x><noise type="gaussian"><mean>0</mean><stddev>0.00186</stddev></noise></x>
+            <y><noise type="gaussian"><mean>0</mean><stddev>0.00186</stddev></noise></y>
+            <z><noise type="gaussian"><mean>0</mean><stddev>0.00186</stddev></noise></z>
+          </linear_acceleration>
+        </imu>
+      </sensor>
+      <sensor name="altimeter" type="altimeter">
+        <always_on>1</always_on>
+        <update_rate>50</update_rate>
+        <altimeter/>
+      </sensor>
+      <sensor name="magnetometer" type="magnetometer">
+        <always_on>1</always_on>
+        <update_rate>100</update_rate>
+        <magnetometer/>
+      </sensor>
+      <sensor name="gps" type="navsat">
+        <always_on>1</always_on>
+        <update_rate>10</update_rate>
+      </sensor>
+    </link>
+    <link name="motor_0">
+      <pose>0.3 0.3 0.01 0 0 0</pose>
+      <inertial>
+        <mass>0.14885281374238568</mass>
+        <inertia><ixx>0.0001</ixx><iyy>0.0001</iyy><izz>0.00088838532</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+      </inertial>
+      <visual name="prop_0_vis">
+        <pose>0 0 0.005 0 0 0</pose>
+        <geometry><cylinder><radius>0.229</radius><length>0.002</length></cylinder></geometry>
+        <material><ambient>0.1 0.1 0.1 0.8</ambient></material>
+      </visual>
+    </link>
+    <joint name="j_m_0" type="fixed">
+      <parent>base_link</parent>
+      <child>motor_0</child>
+    </joint>
+    <link name="motor_1">
+      <pose>0.3 -0.3 0.01 0 0 0</pose>
+      <inertial>
+        <mass>0.14885281374238568</mass>
+        <inertia><ixx>0.0001</ixx><iyy>0.0001</iyy><izz>0.00088838532</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+      </inertial>
+      <visual name="prop_1_vis">
+        <pose>0 0 0.005 0 0 0</pose>
+        <geometry><cylinder><radius>0.229</radius><length>0.002</length></cylinder></geometry>
+        <material><ambient>0.1 0.1 0.1 0.8</ambient></material>
+      </visual>
+    </link>
+    <joint name="j_m_1" type="fixed">
+      <parent>base_link</parent>
+      <child>motor_1</child>
+    </joint>
+    <link name="motor_2">
+      <pose>-0.3 0.3 0.01 0 0 0</pose>
+      <inertial>
+        <mass>0.14885281374238568</mass>
+        <inertia><ixx>0.0001</ixx><iyy>0.0001</iyy><izz>0.00088838532</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+      </inertial>
+      <visual name="prop_2_vis">
+        <pose>0 0 0.005 0 0 0</pose>
+        <geometry><cylinder><radius>0.229</radius><length>0.002</length></cylinder></geometry>
+        <material><ambient>0.1 0.1 0.1 0.8</ambient></material>
+      </visual>
+    </link>
+    <joint name="j_m_2" type="fixed">
+      <parent>base_link</parent>
+      <child>motor_2</child>
+    </joint>
+    <link name="motor_3">
+      <pose>-0.3 -0.3 0.01 0 0 0</pose>
+      <inertial>
+        <mass>0.14885281374238568</mass>
+        <inertia><ixx>0.0001</ixx><iyy>0.0001</iyy><izz>0.00088838532</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+      </inertial>
+      <visual name="prop_3_vis">
+        <pose>0 0 0.005 0 0 0</pose>
+        <geometry><cylinder><radius>0.229</radius><length>0.002</length></cylinder></geometry>
+        <material><ambient>0.1 0.1 0.1 0.8</ambient></material>
+      </visual>
+    </link>
+    <joint name="j_m_3" type="fixed">
+      <parent>base_link</parent>
+      <child>motor_3</child>
+    </joint>
+    <plugin name="drone_optimizer_mjcf">
+      <mujoco_xml>
+<mujoco model="custom_drone">
+    <compiler angle="degree" coordinate="local" eulerseq="xyz"/>
+    <option timestep="0.002" gravity="0 0 -9.81"/>
+    
+    <custom>
+        <numeric name="transport_delay_ms" data="10.0"/>
+        <numeric name="motor_tau" data="0.8"/>
+        <numeric name="sim_duration_s" data="10"/>
+        <numeric name="dof_mask" data="0 0 1 1 1 1"/>
+    </custom>
+    
+    <worldbody>
+        <light name="sun" pos="0 0 10" dir="0 0 -1"/>
+        <geom name="floor" type="plane" size="10 10 0.1" rgba="0.8 0.9 0.8 1"/>
+        
+        <body name="drone" pos="0 0 1">
+            <freejoint name="root"/>
+            
+            <!-- Core -->
+            <geom name="core" type="box" size="0.3 0.2 0.1" mass="15" rgba="0.2 0.3 0.8 1"/>
+
+            <!-- Motor 0: 18" CCW (Force: 83.37N, Cant: 0, 0) [Data: 3400 13.27 0.31; 3800 16.72 0.39 ; 4200 20.61 0.48; 4600 24.92 0.58; 5000 29.69 0.69; 5400 34.88 0.81; 5800 40.50 0.93; 6200 46.56 1.07; 6600 53.05 1.22; 7000 59.98 1.38; 7400 67.34 1.55; 7800 75.14 1.73; 8200 83.37 1.92 Unit: N] -->
+            <body name="motor_assembly_0" pos="0 0 0">
+                <geom name="arm_0" type="capsule" fromto="0 0 0 0.3 0.3 0" size="0.005" mass="0.085" rgba="0.5 0.5 0.5 1"/>
+                <body name="motor_mount_0" pos="0.3 0.3 0.005" euler="0 0 0">
+                    <geom name="motor_bell_0" type="cylinder" size="0.015 0.005" mass="0.03" rgba="0.2 0.2 0.2 1"/>
+                    <geom name="prop_0" type="cylinder" pos="0 0 0.005" size="0.229 0.002" mass="0.0340" rgba="0.1 0.1 0.1 0.3"/>
+                    <site name="thruster_0" type="cylinder" pos="0 0 0.005" size="0.229 0.002" rgba="1 0 0 0.5"/>
+                </body>
+            </body>
+
+            <!-- Motor 1: 18" CW (Force: 83.37N, Cant: 0, 0) [Data: 3400 13.27 0.31; 3800 16.72 0.39 ; 4200 20.61 0.48; 4600 24.92 0.58; 5000 29.69 0.69; 5400 34.88 0.81; 5800 40.50 0.93; 6200 46.56 1.07; 6600 53.05 1.22; 7000 59.98 1.38; 7400 67.34 1.55; 7800 75.14 1.73; 8200 83.37 1.92 Unit: N] -->
+            <body name="motor_assembly_1" pos="0 0 0">
+                <geom name="arm_1" type="capsule" fromto="0 0 0 0.3 -0.3 0" size="0.005" mass="0.085" rgba="0.5 0.5 0.5 1"/>
+                <body name="motor_mount_1" pos="0.3 -0.3 0.005" euler="0 0 0">
+                    <geom name="motor_bell_1" type="cylinder" size="0.015 0.005" mass="0.03" rgba="0.2 0.2 0.2 1"/>
+                    <geom name="prop_1" type="cylinder" pos="0 0 0.005" size="0.229 0.002" mass="0.0340" rgba="0.1 0.1 0.1 0.3"/>
+                    <site name="thruster_1" type="cylinder" pos="0 0 0.005" size="0.229 0.002" rgba="0 0 1 0.5"/>
+                </body>
+            </body>
+
+            <!-- Motor 2: 18" CW (Force: 83.37N, Cant: 0, 0) [Data: 3400 13.27 0.31; 3800 16.72 0.39 ; 4200 20.61 0.48; 4600 24.92 0.58; 5000 29.69 0.69; 5400 34.88 0.81; 5800 40.50 0.93; 6200 46.56 1.07; 6600 53.05 1.22; 7000 59.98 1.38; 7400 67.34 1.55; 7800 75.14 1.73; 8200 83.37 1.92 Unit: N] -->
+            <body name="motor_assembly_2" pos="0 0 0">
+                <geom name="arm_2" type="capsule" fromto="0 0 0 -0.3 0.3 0" size="0.005" mass="0.085" rgba="0.5 0.5 0.5 1"/>
+                <body name="motor_mount_2" pos="-0.3 0.3 0.005" euler="0 0 0">
+                    <geom name="motor_bell_2" type="cylinder" size="0.015 0.005" mass="0.03" rgba="0.2 0.2 0.2 1"/>
+                    <geom name="prop_2" type="cylinder" pos="0 0 0.005" size="0.229 0.002" mass="0.0340" rgba="0.1 0.1 0.1 0.3"/>
+                    <site name="thruster_2" type="cylinder" pos="0 0 0.005" size="0.229 0.002" rgba="1 0 0 0.5"/>
+                </body>
+            </body>
+
+            <!-- Motor 3: 18" CCW (Force: 83.37N, Cant: 0, 0) [Data: 3400 13.27 0.31; 3800 16.72 0.39 ; 4200 20.61 0.48; 4600 24.92 0.58; 5000 29.69 0.69; 5400 34.88 0.81; 5800 40.50 0.93; 6200 46.56 1.07; 6600 53.05 1.22; 7000 59.98 1.38; 7400 67.34 1.55; 7800 75.14 1.73; 8200 83.37 1.92 Unit: N] -->
+            <body name="motor_assembly_3" pos="0 0 0">
+                <geom name="arm_3" type="capsule" fromto="0 0 0 -0.3 -0.3 0" size="0.005" mass="0.085" rgba="0.5 0.5 0.5 1"/>
+                <body name="motor_mount_3" pos="-0.3 -0.3 0.005" euler="0 0 0">
+                    <geom name="motor_bell_3" type="cylinder" size="0.015 0.005" mass="0.03" rgba="0.2 0.2 0.2 1"/>
+                    <geom name="prop_3" type="cylinder" pos="0 0 0.005" size="0.229 0.002" mass="0.0340" rgba="0.1 0.1 0.1 0.3"/>
+                    <site name="thruster_3" type="cylinder" pos="0 0 0.005" size="0.229 0.002" rgba="0 0 1 0.5"/>
+                </body>
+            </body>
+        </body>
+    </worldbody>
+
+    <actuator>
+        <general name="m_0" site="thruster_0" gear="0 0 1 0 0 0.0231" ctrllimited="true" ctrlrange="0 83.4"/>
+        <general name="m_1" site="thruster_1" gear="0 0 1 0 0 -0.0231" ctrllimited="true" ctrlrange="0 83.4"/>
+        <general name="m_2" site="thruster_2" gear="0 0 1 0 0 -0.0231" ctrllimited="true" ctrlrange="0 83.4"/>
+        <general name="m_3" site="thruster_3" gear="0 0 1 0 0 0.0231" ctrllimited="true" ctrlrange="0 83.4"/>
+    </actuator>
+</mujoco>
+      </mujoco_xml>
+    </plugin>
+  </model>
+</sdf>

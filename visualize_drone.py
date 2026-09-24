@@ -65,7 +65,17 @@ def main():
         return
 
     try:
-        model = mujoco.MjModel.from_xml_path(args.model)
+        xml_content = open(args.model, "r", encoding="utf-8").read()
+        if args.model.endswith('.sdf'):
+            import re
+            match = re.search(r'<mujoco_xml>(.*?)</mujoco_xml>', xml_content, re.DOTALL)
+            if not match:
+                print("Error: No embedded <mujoco_xml> found in SDF file.")
+                return
+            mjcf_string = match.group(1).strip()
+            model = mujoco.MjModel.from_xml_string(mjcf_string)
+        else:
+            model = mujoco.MjModel.from_xml_string(xml_content)
     except ValueError as e:
         print(f"Error loading model {args.model}: {e}")
         return
@@ -148,6 +158,11 @@ def main():
     integral_error_ang = np.zeros(3)
     integral_error_body_x = 0.0
     integral_error_body_y = 0.0
+    
+    prev_rpms = np.zeros(num_motors)
+    for i in range(num_motors):
+        if "rpms" in config["motors"][i] and len(config["motors"][i]["rpms"]) >= 2:
+            prev_rpms[i] = config["motors"][i]["rpms"][0]
     
     base_thrusts = mixer @ np.array([mass * 9.81, 0.0, 0.0, 0.0])
     actual_motor_pwm = np.sign(base_thrusts) * np.sqrt(np.abs(base_thrusts) / safe_max_thrusts)
@@ -386,6 +401,25 @@ def main():
         physical_thrusts = np.sign(actual_motor_pwm_arr) * (actual_motor_pwm_arr ** 2) * max_thrusts
         
         data.ctrl[:] = physical_thrusts
+        
+        # Simulate RPM transient torque (RPM jerk)
+        transient_torque_z = 0.0
+        for i in range(num_motors):
+            m = config["motors"][i]
+            if m.get("inertia", 0) > 0 and len(m.get("rpms", [])) >= 2:
+                current_rpm = np.interp(abs(physical_thrusts[i]), m["thrusts"], m["rpms"])
+                rpm_diff = current_rpm - prev_rpms[i]
+                prev_rpms[i] = current_rpm
+                
+                alpha = (rpm_diff * 2.0 * np.pi / 60.0) / dt
+                t_jerk = - m["inertia"] * alpha * m.get("spin", 1)
+                transient_torque_z += t_jerk
+                
+        if transient_torque_z != 0.0:
+            body_mat = data.xmat[drone_body_id].reshape(3, 3)
+            z_axis_world = body_mat @ np.array([0.0, 0.0, 1.0])
+            data.xfrc_applied[drone_body_id, 3:6] = z_axis_world * transient_torque_z
+            
         mujoco.mj_step(model, data)
         
         if step % (int(0.02 / dt)) == 0:
