@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 # --- Target Maneuver Settings ---
 TARGET_POS_X = 1.0
 TARGET_POS_Y = 0.5
-TARGET_POS_Z_START = 1.0
+TARGET_POS_Z_START = 0.05
 TARGET_POS_Z_END = 1.5
 TARGET_PITCH_DEG = 0.0
 TARGET_ROLL_DEG = 0.0

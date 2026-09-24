@@ -13,7 +13,7 @@ import os
 # --- Target Maneuver Settings ---
 TARGET_POS_X = 1.0
 TARGET_POS_Y = 0.5
-TARGET_POS_Z_START = 1.0
+TARGET_POS_Z_START = 0.05
 TARGET_POS_Z_END = 1.5
 TARGET_PITCH_DEG = 0.0
 TARGET_ROLL_DEG = 0.0
@@ -198,7 +198,7 @@ def evaluate_flight(params):
             ang_vel = data.qvel[3:6].copy()
             
             up_world = apply_quat(quat, np.array([0.0, 0.0, 1.0]))
-            if up_world[2] < 0.5 or pos[2] < 0.1 or np.any(np.isnan(pos)):
+            if up_world[2] < 0.5 or pos[2] < 0.02 or np.any(np.isnan(pos)):
                 loss += 1e5 + (steps - step) * 10.0
                 break
                 
@@ -377,7 +377,7 @@ def main():
     
     es = cma.CMAEvolutionStrategy(x0, 1.0, options)
     
-    cpu_usage_percent = 80.0
+    cpu_usage_percent = 60.0
     num_cores = multiprocessing.cpu_count()
     max_workers = max(1, int(num_cores * (cpu_usage_percent / 100.0)))
     
