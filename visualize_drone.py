@@ -149,7 +149,7 @@ def main():
     target_y = TARGET_POS_Y
     target_yaw_deg = TARGET_YAW_DEG
     
-    print(f"Loaded Drone Configuration: {num_motors} motors from {args.xml}")
+    print(f"Loaded Drone Configuration: {num_motors} motors from {args.model}")
     print("Launching MuJoCo viewer. The flight will take exactly 5 seconds...")
     
     for step in range(steps):
