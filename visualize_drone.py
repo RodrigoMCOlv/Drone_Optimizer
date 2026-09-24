@@ -241,7 +241,7 @@ def main():
             target_pitch = np.radians(TARGET_PITCH_DEG)
         else:
             accel_x_cmd = Kp_x * pos_err_body_x + Kd_x * vel_err_body_x
-            target_pitch = np.clip(-accel_x_cmd / 9.81, -max_tilt, max_tilt)
+            target_pitch = np.clip(accel_x_cmd / 9.81, -max_tilt, max_tilt)
             
         if dof_mask[1] == 1:
             wrench_dict[1] = (Kp_y * pos_err_body_y + Kd_y * vel_err_body_y) * mass
