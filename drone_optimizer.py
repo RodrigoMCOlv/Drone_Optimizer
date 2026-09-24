@@ -8,6 +8,7 @@ import signal
 import json
 import multiprocessing
 import time
+import os
 
 # --- Target Maneuver Settings ---
 TARGET_POS_X = 1.0
@@ -399,9 +400,11 @@ def main():
     print(f"Mixer matrix:\n{B_pinv}")
     
     gen = 0
+    start_time = time.time()
     with multiprocessing.Pool(processes=max_workers, initializer=init_worker, initargs=(args.model,)) as pool:
         try:
             while not es.stop():
+                gen_start_time = time.time()
                 solutions = es.ask()
                 fitnesses = pool.map(evaluate_flight, solutions)
                 es.tell(solutions, fitnesses)
@@ -411,7 +414,10 @@ def main():
                 loss_history_best.append(best_loss)
                 loss_history_avg.append(avg_loss)
                 
-                print(f"Generation {gen:03d} | Best Loss: {best_loss:10.4f} | Avg Loss: {avg_loss:10.4f}")
+                gen_time = time.time() - gen_start_time
+                total_time = time.time() - start_time
+                
+                print(f"Generation {gen:03d} | Best Loss: {best_loss:10.4f} | Avg Loss: {avg_loss:10.4f} | Gen Time: {gen_time:.2f}s | Total Time: {total_time:.2f}s")
                 
                 if gen % 10 == 0:
                     line_best.set_xdata(range(len(loss_history_best)))
