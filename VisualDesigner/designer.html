@@ -267,10 +267,11 @@
             <h2>Selected Motor</h2>
             
             <div class="form-group">
-                <label>Position (X, Y mm) [Drag on canvas]</label>
+                <label>Position (X, Y, Z mm) [Drag on canvas]</label>
                 <div class="row">
                     <input type="number" id="m_x" step="1" onchange="updateMotor()">
                     <input type="number" id="m_y" step="1" onchange="updateMotor()">
+                    <input type="number" id="m_z" step="1" onchange="updateMotor()" value="0">
                 </div>
             </div>
             
@@ -525,7 +526,7 @@
         function addMotor() {
             motors.push({
                 id: nextId++,
-                x: 100, y: 100, prop: 5, force: 12, perf_data: "", thrust_unit: "gf", torque_unit: "Nm", drag: 0.015, prop_mass: 3.0, spin: 'CW', cant_r: 0, cant_p: 0
+                x: 100, y: 100, z: 0, prop: 5, force: 12, perf_data: "", thrust_unit: "gf", torque_unit: "Nm", drag: 0.015, prop_mass: 3.0, spin: 'CW', cant_r: 0, cant_p: 0
             });
             selectMotor(nextId - 1);
         }
@@ -554,6 +555,7 @@
             if (!m) return;
             document.getElementById('m_x').value = m.x;
             document.getElementById('m_y').value = m.y;
+            document.getElementById('m_z').value = m.z !== undefined ? m.z : 0;
             document.getElementById('m_prop').value = m.prop;
             document.getElementById('m_force').value = m.force;
             document.getElementById('m_perf_data').value = m.perf_data || "";
@@ -571,6 +573,7 @@
             if (!m) return;
             m.x = parseFloat(document.getElementById('m_x').value);
             m.y = parseFloat(document.getElementById('m_y').value);
+            m.z = parseFloat(document.getElementById('m_z').value) || 0;
             m.prop = parseFloat(document.getElementById('m_prop').value);
             m.force = parseFloat(document.getElementById('m_force').value);
             m.perf_data = document.getElementById('m_perf_data').value;
@@ -628,6 +631,7 @@
             motors.forEach(other => {
                 if (other.id !== m.id) {
                     other.prop = m.prop;
+                    other.z = m.z !== undefined ? m.z : 0;
                     other.force = m.force;
                     other.perf_data = m.perf_data;
                     other.thrust_unit = m.thrust_unit;
@@ -741,21 +745,28 @@
       </sensor>\n`;
             }
             if (document.getElementById('g_sensor_baro').checked) {
-                sdf += `      <sensor name="altimeter" type="altimeter">
+                sdf += `      <sensor name="air_pressure_sensor" type="air_pressure">
         <always_on>1</always_on>
         <update_rate>50</update_rate>
-        <altimeter/>
+        <air_pressure>
+          <pressure>
+            <noise type="gaussian">
+              <mean>0</mean>
+              <stddev>0.01</stddev>
+            </noise>
+          </pressure>
+        </air_pressure>
       </sensor>\n`;
             }
             if (document.getElementById('g_sensor_mag').checked) {
-                sdf += `      <sensor name="magnetometer" type="magnetometer">
+                sdf += `      <sensor name="magnetometer_sensor" type="magnetometer">
         <always_on>1</always_on>
         <update_rate>100</update_rate>
         <magnetometer/>
       </sensor>\n`;
             }
             if (document.getElementById('g_sensor_gps').checked) {
-                sdf += `      <sensor name="gps" type="navsat">
+                sdf += `      <sensor name="navsat_sensor" type="navsat">
         <always_on>1</always_on>
         <update_rate>10</update_rate>
       </sensor>\n`;
@@ -767,6 +778,7 @@
                 const propRadius = (m.prop * 0.0254) / 2.0;
                 const m_x_m = m.x / 1000;
                 const m_y_m = m.y / 1000;
+                const m_z_m = (m.z !== undefined ? m.z : 0) / 1000;
                 
                 const arm_mass = 0.02 * (Math.hypot(m_x_m, m_y_m) / 0.1);
                 const yaw_torque = m.spin === 'CW' ? -m.drag : m.drag;
@@ -777,8 +789,8 @@
                 mjcf += `
             <!-- Motor ${i}: ${m.prop}" ${m.spin} (Force: ${m.force}N, Cant: ${m.cant_r}, ${m.cant_p}) [Data: ${perf_data_attr || "none"} Unit: ${m.thrust_unit}] -->
             <body name="motor_assembly_${i}" pos="0 0 0">
-                <geom name="arm_${i}" type="capsule" fromto="0 0 0 ${m_x_m} ${m_y_m} 0" size="0.005" mass="${arm_mass.toFixed(3)}" rgba="0.5 0.5 0.5 1"/>
-                <body name="motor_mount_${i}" pos="${m_x_m} ${m_y_m} 0.005" euler="${m.cant_r} ${m.cant_p} 0">
+                <geom name="arm_${i}" type="capsule" fromto="0 0 0 ${m_x_m} ${m_y_m} ${m_z_m}" size="0.005" mass="${arm_mass.toFixed(3)}" rgba="0.5 0.5 0.5 1"/>
+                <body name="motor_mount_${i}" pos="${m_x_m} ${m_y_m} ${m_z_m + 0.005}" euler="${m.cant_r} ${m.cant_p} 0">
                     <geom name="motor_bell_${i}" type="cylinder" size="0.015 0.005" mass="0.03" rgba="0.2 0.2 0.2 1"/>
                     <geom name="prop_${i}" type="cylinder" pos="0 0 0.005" size="${propRadius.toFixed(3)} 0.002" mass="${p_mass.toFixed(4)}" rgba="0.1 0.1 0.1 0.3"/>
                     <site name="thruster_${i}" type="cylinder" pos="0 0 0.005" size="${propRadius.toFixed(3)} 0.002" rgba="${m.y > 0 ? "1 0 0 0.5" : "0 0 1 0.5"}"/>
@@ -794,7 +806,7 @@
                 
                 // Add to SDF
                 sdf += `    <link name="motor_${i}">
-      <pose>${m_x_m} ${m_y_m} 0.01 ${m.cant_r} ${m.cant_p} 0</pose>
+      <pose>${m_x_m} ${m_y_m} ${0.01 + m_z_m} ${m.cant_r} ${m.cant_p} 0</pose>
       <inertial>
         <mass>${link_mass}</mass>
         <inertia><ixx>${i_val}</ixx><iyy>${i_val}</iyy><izz>${i_val}</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
