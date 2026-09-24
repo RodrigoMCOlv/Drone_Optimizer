@@ -1,0 +1,56 @@
+<mujoco model="standard_5inch_quad">
+    <compiler angle="degree" coordinate="local" eulerseq="xyz"/>
+    <option timestep="0.002" gravity="0 0 -9.81"/>
+    
+    <!-- Hardware Profile Metadata: Ultra-low latency typical of 5-inch FPV frames -->
+    <custom>
+        <numeric name="transport_delay_ms" data="5.0"/>
+        <numeric name="motor_tau" data="0.015"/>
+        <numeric name="dof_mask" data="0 0 1 1 1 1"/>
+    </custom>
+    
+    <worldbody>
+        <light name="sun" pos="0 0 10" dir="0 0 -1"/>
+        <geom name="floor" type="plane" size="10 10 0.1" rgba="0.8 0.9 0.8 1"/>
+        
+        <body name="drone" pos="0 0 1">
+            <freejoint name="root"/>
+            <!-- 0.6 kg mass, perfectly centered with symmetric diagonal inertia -->
+            <inertial pos="0 0 0" mass="0.6" diaginertia="0.002 0.002 0.004"/>
+            <geom name="core" type="box" size="0.05 0.05 0.02" rgba="0.2 0.8 0.2 1"/>
+            
+            <!-- Motor 0: Front Right (+45 deg) -->
+            <body name="arm_0" pos="0.08 0.08 0.0">
+                <geom type="capsule" size="0.005 0.04" rgba="0.5 0.5 0.5 1" euler="90 45 0"/>
+                <site name="thruster_0" pos="0 0 0.01" type="cylinder" size="0.025 0.005" rgba="1 0 0 1"/>
+            </body>
+            
+            <!-- Motor 1: Front Left (+135 deg) -->
+            <body name="arm_1" pos="-0.08 0.08 0.0">
+                <geom type="capsule" size="0.005 0.04" rgba="0.5 0.5 0.5 1" euler="90 -45 0"/>
+                <site name="thruster_1" pos="0 0 0.01" type="cylinder" size="0.025 0.005" rgba="1 0 0 1"/>
+            </body>
+            
+            <!-- Motor 2: Rear Left (-135 deg) -->
+            <body name="arm_2" pos="-0.08 -0.08 0.0">
+                <geom type="capsule" size="0.005 0.04" rgba="0.5 0.5 0.5 1" euler="90 45 0"/>
+                <site name="thruster_2" pos="0 0 0.01" type="cylinder" size="0.025 0.005" rgba="1 0 0 1"/>
+            </body>
+            
+            <!-- Motor 3: Rear Right (-45 deg) -->
+            <body name="arm_3" pos="0.08 -0.08 0.0">
+                <geom type="capsule" size="0.005 0.04" rgba="0.5 0.5 0.5 1" euler="90 -45 0"/>
+                <site name="thruster_3" pos="0 0 0.01" type="cylinder" size="0.025 0.005" rgba="1 0 0 1"/>
+            </body>
+        </body>
+    </worldbody>
+    
+    <actuator>
+        <!-- Gear Array: [ForceX, ForceY, ForceZ, TorqueX, TorqueY, TorqueZ] -->
+        <!-- Pure planar configuration with alternating yaw drag torques -->
+        <general name="m_0" site="thruster_0" gear="0 0 1 0 0 -0.015" ctrllimited="true" ctrlrange="0 12"/>
+        <general name="m_1" site="thruster_1" gear="0 0 1 0 0  0.015" ctrllimited="true" ctrlrange="0 12"/>
+        <general name="m_2" site="thruster_2" gear="0 0 1 0 0 -0.015" ctrllimited="true" ctrlrange="0 12"/>
+        <general name="m_3" site="thruster_3" gear="0 0 1 0 0  0.015" ctrllimited="true" ctrlrange="0 12"/>
+    </actuator>
+</mujoco>
