@@ -83,6 +83,11 @@ def main():
     Kd = np.array(config["pid_gains"]["Kd"])
     Kp_x, Kd_x, Kp_y, Kd_y = config["outer_gains"]
     
+    if "max_int" in config:
+        max_int = np.array(config["max_int"])
+    else:
+        max_int = np.array([2.0, 2.0, 2.0, 2.0])
+    
     if "dof_mask" in config:
         dof_mask = np.array(config["dof_mask"])
     else:
@@ -270,11 +275,11 @@ def main():
         ang_err = 2.0 * q_err[1:]
         ang_vel_err = target_ang_vel - ang_vel
         
-        integral_error_z = np.clip(integral_error_z + pos_err[2] * dt, -100.0, 100.0)
+        integral_error_z = np.clip(integral_error_z + pos_err[2] * dt, -max_int[0], max_int[0])
         desired_accel_z = Kp[0]*pos_err[2] + Ki[0]*integral_error_z + Kd[0]*vel_err[2]
         desired_force_z = (desired_accel_z + 9.81) * mass
         
-        integral_error_ang = np.clip(integral_error_ang + ang_err * dt, -100.0, 100.0)
+        integral_error_ang = np.clip(integral_error_ang + ang_err * dt, -max_int[1:], max_int[1:])
         desired_ang_accel = Kp[1:]*ang_err + Ki[1:]*integral_error_ang + Kd[1:]*ang_vel_err
         
         diag_I = model.body_inertia[drone_body_id]

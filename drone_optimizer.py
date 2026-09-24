@@ -127,6 +127,7 @@ def evaluate_flight(params):
     Ki = params[4:8]
     Kd = params[8:12]
     Kp_x, Kd_x, Kp_y, Kd_y = params[12:16]
+    max_int = params[16:20]
     
     mixer = B_pinv
     total_loss = 0.0
@@ -257,13 +258,13 @@ def evaluate_flight(params):
             ang_vel_err = target_ang_vel - ang_vel
             
             integral_error_z += pos_err[2] * dt
-            integral_error_z = np.clip(integral_error_z, -100.0, 100.0)
+            integral_error_z = np.clip(integral_error_z, -max_int[0], max_int[0])
             
             desired_accel_z = Kp[0] * pos_err[2] + Ki[0] * integral_error_z + Kd[0] * vel_err[2]
             desired_force_z = (desired_accel_z + 9.81) * mass
             
             integral_error_ang += ang_err * dt
-            integral_error_ang = np.clip(integral_error_ang, -100.0, 100.0)
+            integral_error_ang = np.clip(integral_error_ang, -max_int[1:], max_int[1:])
             
             desired_ang_accel = Kp[1:] * ang_err + Ki[1:] * integral_error_ang + Kd[1:] * ang_vel_err
             
@@ -349,23 +350,26 @@ def main():
         32.96, 12.70, 5.28, 5.45,  # Kp
         1.67, 0.51, 0.46, 0.69,    # Ki
         9.63, 1.99, 0.83, 8.08,    # Kd
-        1.45, 0.77, 1.45, 0.77     # Kp_x, Kd_x, Kp_y, Kd_y
+        1.45, 0.77, 1.45, 0.77,    # Kp_x, Kd_x, Kp_y, Kd_y
+        10.0, 10.0, 10.0, 10.0     # max_int
     ]
     
     stds = [
         10.0, 10.0, 10.0, 10.0,
         1.0, 1.0, 1.0, 1.0,
         5.0, 5.0, 5.0, 5.0,
-        1.0, 0.5, 1.0, 0.5
+        1.0, 0.5, 1.0, 0.5,
+        5.0, 5.0, 5.0, 5.0
     ]
     
-    bounds_lower = [0.0] * 16
+    bounds_lower = [0.0] * 20
     
     bounds_upper = [
         100.0, 100.0, 100.0, 100.0,  
-        5.0, 5.0, 5.0, 5.0,          
+        10.0, 10.0, 10.0, 10.0,          
         30.0, 30.0, 30.0, 30.0,      
-        10.0, 10.0, 10.0, 10.0       
+        10.0, 10.0, 10.0, 10.0,
+        100.0, 100.0, 100.0, 100.0
     ]
     
     options = {
@@ -488,7 +492,8 @@ def main():
             "Ki": best_Ki.tolist(),
             "Kd": best_Kd.tolist()
         },
-        "outer_gains": best_outer.tolist()
+        "outer_gains": best_outer.tolist(),
+        "max_int": best_params[16:20].tolist()
     }
     out_path = os.path.join(out_dir, f"{xml_name}_opt.json")
     with open(out_path, "w") as f:
@@ -503,6 +508,7 @@ def visualize_best_flight(best_params, xml_name):
     Ki = best_params[4:8]
     Kd = best_params[8:12]
     Kp_x, Kd_x, Kp_y, Kd_y = best_params[12:16]
+    max_int = best_params[16:20]
     mixer = B_pinv
     
     mass = model.body_mass[drone_body_id]
@@ -619,11 +625,11 @@ def visualize_best_flight(best_params, xml_name):
         ang_err = 2.0 * q_err[1:]
         ang_vel_err = target_ang_vel - ang_vel
         
-        integral_error_z = np.clip(integral_error_z + pos_err[2] * dt, -2.0, 2.0)
+        integral_error_z = np.clip(integral_error_z + pos_err[2] * dt, -max_int[0], max_int[0])
         desired_accel_z = Kp[0]*pos_err[2] + Ki[0]*integral_error_z + Kd[0]*vel_err[2]
         desired_force_z = (desired_accel_z + 9.81) * mass
         
-        integral_error_ang = np.clip(integral_error_ang + ang_err * dt, -2.0, 2.0)
+        integral_error_ang = np.clip(integral_error_ang + ang_err * dt, -max_int[1:], max_int[1:])
         desired_ang_accel = Kp[1:]*ang_err + Ki[1:]*integral_error_ang + Kd[1:]*ang_vel_err
         
         diag_I = model.body_inertia[drone_body_id]
