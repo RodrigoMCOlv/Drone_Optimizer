@@ -1,17 +1,17 @@
 <sdf version="1.7">
-  <model name="custom_drone">
+  <model name="LargeQuad">
     <link name="base_link">
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>15</mass>
-        <inertia><ixx>0.003</ixx><iyy>0.003</iyy><izz>0.005</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+        <inertia><ixx>0.25000000000000006</ixx><iyy>0.25000000000000006</iyy><izz>0.4000000000000001</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
       </inertial>
       <visual name="core_vis">
-        <geometry><box><size>0.6 0.4 0.2</size></box></geometry>
+        <geometry><box><size>0.4 0.4 0.2</size></box></geometry>
         <material><ambient>0.2 0.3 0.8 1</ambient></material>
       </visual>
       <collision name="core_col">
-        <geometry><box><size>0.6 0.4 0.2</size></box></geometry>
+        <geometry><box><size>0.4 0.4 0.2</size></box></geometry>
       </collision>
       <sensor name="imu_sensor" type="imu">
         <always_on>1</always_on>
@@ -48,7 +48,7 @@
       <pose>0.3 0.3 0.01 0 0 0</pose>
       <inertial>
         <mass>0.14885281374238568</mass>
-        <inertia><ixx>0.0001</ixx><iyy>0.0001</iyy><izz>0.00088838532</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+        <inertia><ixx>0.0038893721932185205</ixx><iyy>0.0038893721932185205</iyy><izz>0.0038893721932185205</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
       </inertial>
       <visual name="prop_0_vis">
         <pose>0 0 0.005 0 0 0</pose>
@@ -64,7 +64,7 @@
       <pose>0.3 -0.3 0.01 0 0 0</pose>
       <inertial>
         <mass>0.14885281374238568</mass>
-        <inertia><ixx>0.0001</ixx><iyy>0.0001</iyy><izz>0.00088838532</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+        <inertia><ixx>0.0038893721932185205</ixx><iyy>0.0038893721932185205</iyy><izz>0.0038893721932185205</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
       </inertial>
       <visual name="prop_1_vis">
         <pose>0 0 0.005 0 0 0</pose>
@@ -80,7 +80,7 @@
       <pose>-0.3 0.3 0.01 0 0 0</pose>
       <inertial>
         <mass>0.14885281374238568</mass>
-        <inertia><ixx>0.0001</ixx><iyy>0.0001</iyy><izz>0.00088838532</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+        <inertia><ixx>0.0038893721932185205</ixx><iyy>0.0038893721932185205</iyy><izz>0.0038893721932185205</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
       </inertial>
       <visual name="prop_2_vis">
         <pose>0 0 0.005 0 0 0</pose>
@@ -96,7 +96,7 @@
       <pose>-0.3 -0.3 0.01 0 0 0</pose>
       <inertial>
         <mass>0.14885281374238568</mass>
-        <inertia><ixx>0.0001</ixx><iyy>0.0001</iyy><izz>0.00088838532</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+        <inertia><ixx>0.0038893721932185205</ixx><iyy>0.0038893721932185205</iyy><izz>0.0038893721932185205</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
       </inertial>
       <visual name="prop_3_vis">
         <pose>0 0 0.005 0 0 0</pose>
@@ -108,16 +108,16 @@
       <parent>base_link</parent>
       <child>motor_3</child>
     </joint>
-    <plugin name="drone_optimizer_mjcf">
+    <plugin name="drone_optimizer_mjcf" filename="dummy.so">
       <mujoco_xml>
-<mujoco model="custom_drone">
+<mujoco model="LargeQuad">
     <compiler angle="degree" coordinate="local" eulerseq="xyz"/>
     <option timestep="0.002" gravity="0 0 -9.81"/>
     
     <custom>
         <numeric name="transport_delay_ms" data="10.0"/>
-        <numeric name="motor_tau" data="0.8"/>
-        <numeric name="sim_duration_s" data="10"/>
+        <numeric name="motor_tau" data="0.08"/>
+        <numeric name="sim_duration_s" data="6.0"/>
         <numeric name="dof_mask" data="0 0 1 1 1 1"/>
     </custom>
     
@@ -129,9 +129,9 @@
             <freejoint name="root"/>
             
             <!-- Core -->
-            <geom name="core" type="box" size="0.3 0.2 0.1" mass="15" rgba="0.2 0.3 0.8 1"/>
+            <geom name="core" type="box" size="0.2 0.2 0.1" mass="15" rgba="0.2 0.3 0.8 1"/>
 
-            <!-- Motor 0: 18" CCW (Force: 83.37N, Cant: 0, 0) [Data: 3400 13.27 0.31; 3800 16.72 0.39 ; 4200 20.61 0.48; 4600 24.92 0.58; 5000 29.69 0.69; 5400 34.88 0.81; 5800 40.50 0.93; 6200 46.56 1.07; 6600 53.05 1.22; 7000 59.98 1.38; 7400 67.34 1.55; 7800 75.14 1.73; 8200 83.37 1.92 Unit: N] -->
+            <!-- Motor 0: 18" CCW (Force: 83.37N, Cant: 0, 0) [Data: 3400 13.27 0.31; 3800 16.72 0.39; 4200 20.61 0.48; 4600 24.92 0.58; 5000 29.69 0.69; 5400 34.88 0.81; 5800 40.50 0.93; 6200 46.56 1.07; 6600 53.05 1.22; 7000 59.98 1.38; 7400 67.34 1.55; 7800 75.14 1.73; 8200 83.37 Unit: N] -->
             <body name="motor_assembly_0" pos="0 0 0">
                 <geom name="arm_0" type="capsule" fromto="0 0 0 0.3 0.3 0" size="0.005" mass="0.085" rgba="0.5 0.5 0.5 1"/>
                 <body name="motor_mount_0" pos="0.3 0.3 0.005" euler="0 0 0">
@@ -141,7 +141,7 @@
                 </body>
             </body>
 
-            <!-- Motor 1: 18" CW (Force: 83.37N, Cant: 0, 0) [Data: 3400 13.27 0.31; 3800 16.72 0.39 ; 4200 20.61 0.48; 4600 24.92 0.58; 5000 29.69 0.69; 5400 34.88 0.81; 5800 40.50 0.93; 6200 46.56 1.07; 6600 53.05 1.22; 7000 59.98 1.38; 7400 67.34 1.55; 7800 75.14 1.73; 8200 83.37 1.92 Unit: N] -->
+            <!-- Motor 1: 18" CW (Force: 83.37N, Cant: 0, 0) [Data: 3400 13.27 0.31; 3800 16.72 0.39; 4200 20.61 0.48; 4600 24.92 0.58; 5000 29.69 0.69; 5400 34.88 0.81; 5800 40.50 0.93; 6200 46.56 1.07; 6600 53.05 1.22; 7000 59.98 1.38; 7400 67.34 1.55; 7800 75.14 1.73; 8200 83.37 Unit: N] -->
             <body name="motor_assembly_1" pos="0 0 0">
                 <geom name="arm_1" type="capsule" fromto="0 0 0 0.3 -0.3 0" size="0.005" mass="0.085" rgba="0.5 0.5 0.5 1"/>
                 <body name="motor_mount_1" pos="0.3 -0.3 0.005" euler="0 0 0">
@@ -151,7 +151,7 @@
                 </body>
             </body>
 
-            <!-- Motor 2: 18" CW (Force: 83.37N, Cant: 0, 0) [Data: 3400 13.27 0.31; 3800 16.72 0.39 ; 4200 20.61 0.48; 4600 24.92 0.58; 5000 29.69 0.69; 5400 34.88 0.81; 5800 40.50 0.93; 6200 46.56 1.07; 6600 53.05 1.22; 7000 59.98 1.38; 7400 67.34 1.55; 7800 75.14 1.73; 8200 83.37 1.92 Unit: N] -->
+            <!-- Motor 2: 18" CW (Force: 83.37N, Cant: 0, 0) [Data: 3400 13.27 0.31; 3800 16.72 0.39; 4200 20.61 0.48; 4600 24.92 0.58; 5000 29.69 0.69; 5400 34.88 0.81; 5800 40.50 0.93; 6200 46.56 1.07; 6600 53.05 1.22; 7000 59.98 1.38; 7400 67.34 1.55; 7800 75.14 1.73; 8200 83.37 Unit: N] -->
             <body name="motor_assembly_2" pos="0 0 0">
                 <geom name="arm_2" type="capsule" fromto="0 0 0 -0.3 0.3 0" size="0.005" mass="0.085" rgba="0.5 0.5 0.5 1"/>
                 <body name="motor_mount_2" pos="-0.3 0.3 0.005" euler="0 0 0">
@@ -161,7 +161,7 @@
                 </body>
             </body>
 
-            <!-- Motor 3: 18" CCW (Force: 83.37N, Cant: 0, 0) [Data: 3400 13.27 0.31; 3800 16.72 0.39 ; 4200 20.61 0.48; 4600 24.92 0.58; 5000 29.69 0.69; 5400 34.88 0.81; 5800 40.50 0.93; 6200 46.56 1.07; 6600 53.05 1.22; 7000 59.98 1.38; 7400 67.34 1.55; 7800 75.14 1.73; 8200 83.37 1.92 Unit: N] -->
+            <!-- Motor 3: 18" CCW (Force: 83.37N, Cant: 0, 0) [Data: 3400 13.27 0.31; 3800 16.72 0.39; 4200 20.61 0.48; 4600 24.92 0.58; 5000 29.69 0.69; 5400 34.88 0.81; 5800 40.50 0.93; 6200 46.56 1.07; 6600 53.05 1.22; 7000 59.98 1.38; 7400 67.34 1.55; 7800 75.14 1.73; 8200 83.37 Unit: N] -->
             <body name="motor_assembly_3" pos="0 0 0">
                 <geom name="arm_3" type="capsule" fromto="0 0 0 -0.3 -0.3 0" size="0.005" mass="0.085" rgba="0.5 0.5 0.5 1"/>
                 <body name="motor_mount_3" pos="-0.3 -0.3 0.005" euler="0 0 0">
