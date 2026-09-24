@@ -291,7 +291,7 @@ def main():
         desired_accel_z = Kp[0]*pos_err[2] + Ki[0]*integral_error_z + Kd[0]*vel_err[2]
         desired_force_z = (desired_accel_z + 9.81) * mass
         
-        integral_error_ang = np.clip(integral_error_ang + ang_err * dt, -max_int[1:], max_int[1:])
+        integral_error_ang = np.clip(integral_error_ang + ang_err * dt, -max_int[1:4], max_int[1:4])
         desired_ang_accel = Kp[1:]*ang_err + Ki[1:]*integral_error_ang + Kd[1:]*ang_vel_err
         
         diag_I = model.body_inertia[drone_body_id]
