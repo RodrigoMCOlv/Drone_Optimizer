@@ -126,8 +126,8 @@ def evaluate_flight(params):
     Kp = params[0:4]
     Ki = params[4:8]
     Kd = params[8:12]
-    Kp_x, Kd_x, Kp_y, Kd_y = params[12:16]
-    max_int = params[16:20]
+    Kp_x, Ki_x, Kd_x, Kp_y, Ki_y, Kd_y = params[12:18]
+    max_int = params[18:24]
     
     mixer = B_pinv
     total_loss = 0.0
@@ -166,6 +166,8 @@ def evaluate_flight(params):
         loss = 0.0
         integral_error_z = 0.0
         integral_error_ang = np.zeros(3)
+        integral_error_body_x = 0.0
+        integral_error_body_y = 0.0
         prev_thrusts = np.zeros(num_motors)
         
         base_thrusts = mixer @ np.array([mass * 9.81, 0.0, 0.0, 0.0])
@@ -225,7 +227,9 @@ def evaluate_flight(params):
                 wrench_dict[0] = (Kp_x * pos_err_body_x + Kd_x * vel_err_body_x) * mass
                 target_pitch = np.radians(TARGET_PITCH_DEG)
             else:
-                accel_x_cmd = Kp_x * pos_err_body_x + Kd_x * vel_err_body_x
+                integral_error_body_x += pos_err_body_x * dt
+                integral_error_body_x = np.clip(integral_error_body_x, -max_int[4], max_int[4])
+                accel_x_cmd = Kp_x * pos_err_body_x + Ki_x * integral_error_body_x + Kd_x * vel_err_body_x
                 # Positive pitch = +X body acceleration
                 target_pitch = np.clip(accel_x_cmd / 9.81, -max_tilt, max_tilt)
                 
@@ -233,7 +237,9 @@ def evaluate_flight(params):
                 wrench_dict[1] = (Kp_y * pos_err_body_y + Kd_y * vel_err_body_y) * mass
                 target_roll = np.radians(TARGET_ROLL_DEG)
             else:
-                accel_y_cmd = Kp_y * pos_err_body_y + Kd_y * vel_err_body_y
+                integral_error_body_y += pos_err_body_y * dt
+                integral_error_body_y = np.clip(integral_error_body_y, -max_int[5], max_int[5])
+                accel_y_cmd = Kp_y * pos_err_body_y + Ki_y * integral_error_body_y + Kd_y * vel_err_body_y
                 # Positive roll = roll right = +Y body acceleration (Wait, left +Y, roll right is negative Y... let's re-verify:
                 # Right hand rule: Thumb along X (forward). Fingers curl from Y (left) to Z (up).
                 # So +Roll rotates Y (left) towards Z (up). The left side goes up. The right side goes down. 
@@ -350,33 +356,33 @@ def main():
         32.96, 12.70, 5.28, 5.45,  # Kp
         1.67, 0.51, 0.46, 0.69,    # Ki
         9.63, 1.99, 0.83, 8.08,    # Kd
-        1.45, 0.77, 1.45, 0.77,    # Kp_x, Kd_x, Kp_y, Kd_y
-        10.0, 10.0, 10.0, 10.0     # max_int
+        1.45, 0.1, 0.77, 1.45, 0.1, 0.77, # Kp_x, Ki_x, Kd_x, Kp_y, Ki_y, Kd_y
+        10.0, 10.0, 10.0, 10.0, 5.0, 5.0  # max_int z, r, p, y, x, y
     ]
     
     stds = [
         10.0, 10.0, 10.0, 10.0,
         1.0, 1.0, 1.0, 1.0,
         5.0, 5.0, 5.0, 5.0,
-        1.0, 0.5, 1.0, 0.5,
-        5.0, 5.0, 5.0, 5.0
+        1.0, 0.5, 0.5, 1.0, 0.5, 0.5,
+        5.0, 5.0, 5.0, 5.0, 2.0, 2.0
     ]
     
-    bounds_lower = [0.0] * 20
+    bounds_lower = [0.0] * 24
     
     bounds_upper = [
         100.0, 100.0, 100.0, 100.0,  
         10.0, 10.0, 10.0, 10.0,          
         30.0, 30.0, 30.0, 30.0,      
-        10.0, 10.0, 10.0, 10.0,
-        100.0, 100.0, 100.0, 100.0
+        10.0, 5.0, 10.0, 10.0, 5.0, 10.0,
+        100.0, 100.0, 100.0, 100.0, 20.0, 20.0
     ]
     
     options = {
         'bounds': [bounds_lower, bounds_upper],
         'CMA_stds': stds,
         'maxiter': 1000,  
-        'popsize': 50
+        'popsize': 24
     }
     
     es = cma.CMAEvolutionStrategy(x0, 1.0, options)
@@ -454,7 +460,8 @@ def main():
     best_Kp = best_params[0:4]
     best_Ki = best_params[4:8]
     best_Kd = best_params[8:12]
-    best_outer = best_params[12:16]
+    best_outer = best_params[12:18]
+    best_max_int = best_params[18:24]
     best_mixer = B_pinv
     
     print("\n" + "="*50)
@@ -481,19 +488,32 @@ def main():
     for i, axis in enumerate(axes):
         print(f"{axis:<6} | {best_Kp[i]:8.2f} | {best_Ki[i]:8.2f} | {best_Kd[i]:8.2f}")
         
-    print(f"\nOuter Loop Gains:\nKp_x: {best_outer[0]:.2f} | Kd_x: {best_outer[1]:.2f} | Kp_y: {best_outer[2]:.2f} | Kd_y: {best_outer[3]:.2f}")
+    print(f"\nOuter Loop Gains:\nKp_x: {best_outer[0]:.2f} | Ki_x: {best_outer[1]:.2f} | Kd_x: {best_outer[2]:.2f}\nKp_y: {best_outer[3]:.2f} | Ki_y: {best_outer[4]:.2f} | Kd_y: {best_outer[5]:.2f}")
+        
+    print(f"\nMax Integrators:\nZ: {best_max_int[0]:.2f} | Roll: {best_max_int[1]:.2f} | Pitch: {best_max_int[2]:.2f} | Yaw: {best_max_int[3]:.2f}\nX: {best_max_int[4]:.2f} | Y: {best_max_int[5]:.2f}")
         
     print("\nSaving configuration to file...")
     output_data = {
         "motors": motors,
         "mixer_matrix": best_mixer.tolist(),
         "pid_gains": {
-            "Kp": best_Kp.tolist(),
-            "Ki": best_Ki.tolist(),
-            "Kd": best_Kd.tolist()
+            "z": [best_Kp[0], best_Ki[0], best_Kd[0]],
+            "roll": [best_Kp[1], best_Ki[1], best_Kd[1]],
+            "pitch": [best_Kp[2], best_Ki[2], best_Kd[2]],
+            "yaw": [best_Kp[3], best_Ki[3], best_Kd[3]]
         },
-        "outer_gains": best_outer.tolist(),
-        "max_int": best_params[16:20].tolist()
+        "outer_gains": {
+            "x": [best_outer[0], best_outer[1], best_outer[2]],
+            "y": [best_outer[3], best_outer[4], best_outer[5]]
+        },
+        "max_int": {
+            "z": best_max_int[0],
+            "roll": best_max_int[1],
+            "pitch": best_max_int[2],
+            "yaw": best_max_int[3],
+            "x": best_max_int[4],
+            "y": best_max_int[5]
+        }
     }
     out_path = os.path.join(out_dir, f"{xml_name}_opt.json")
     with open(out_path, "w") as f:
@@ -507,8 +527,8 @@ def visualize_best_flight(best_params, xml_name):
     Kp = best_params[0:4]
     Ki = best_params[4:8]
     Kd = best_params[8:12]
-    Kp_x, Kd_x, Kp_y, Kd_y = best_params[12:16]
-    max_int = best_params[16:20]
+    Kp_x, Ki_x, Kd_x, Kp_y, Ki_y, Kd_y = best_params[12:18]
+    max_int = best_params[18:24]
     mixer = B_pinv
     
     mass = model.body_mass[drone_body_id]
@@ -531,6 +551,8 @@ def visualize_best_flight(best_params, xml_name):
     
     integral_error_z = 0.0
     integral_error_ang = np.zeros(3)
+    integral_error_body_x = 0.0
+    integral_error_body_y = 0.0
     
     base_thrusts = mixer @ np.array([mass * 9.81, 0.0, 0.0, 0.0])
     actual_motor_pwm = np.sign(base_thrusts) * np.sqrt(np.abs(base_thrusts) / safe_max_thrusts)
@@ -599,14 +621,18 @@ def visualize_best_flight(best_params, xml_name):
             wrench_dict[0] = (Kp_x * pos_err_body_x + Kd_x * vel_err_body_x) * mass
             target_pitch = np.radians(TARGET_PITCH_DEG)
         else:
-            accel_x_cmd = Kp_x * pos_err_body_x + Kd_x * vel_err_body_x
+            integral_error_body_x += pos_err_body_x * dt
+            integral_error_body_x = np.clip(integral_error_body_x, -max_int[4], max_int[4])
+            accel_x_cmd = Kp_x * pos_err_body_x + Ki_x * integral_error_body_x + Kd_x * vel_err_body_x
             target_pitch = np.clip(accel_x_cmd / 9.81, -max_tilt, max_tilt)
             
         if dof_mask[1] == 1:
             wrench_dict[1] = (Kp_y * pos_err_body_y + Kd_y * vel_err_body_y) * mass
             target_roll = np.radians(TARGET_ROLL_DEG)
         else:
-            accel_y_cmd = Kp_y * pos_err_body_y + Kd_y * vel_err_body_y
+            integral_error_body_y += pos_err_body_y * dt
+            integral_error_body_y = np.clip(integral_error_body_y, -max_int[5], max_int[5])
+            accel_y_cmd = Kp_y * pos_err_body_y + Ki_y * integral_error_body_y + Kd_y * vel_err_body_y
             target_roll = np.clip(-accel_y_cmd / 9.81, -max_tilt, max_tilt)
         
         cr, sr = np.cos(target_roll * 0.5), np.sin(target_roll * 0.5)

@@ -78,15 +78,21 @@ def main():
     drone_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "drone")
     
     mixer = np.array(config["mixer_matrix"])
-    Kp = np.array(config["pid_gains"]["Kp"])
-    Ki = np.array(config["pid_gains"]["Ki"])
-    Kd = np.array(config["pid_gains"]["Kd"])
-    Kp_x, Kd_x, Kp_y, Kd_y = config["outer_gains"]
+    Kp = np.array([config["pid_gains"]["z"][0], config["pid_gains"]["roll"][0], config["pid_gains"]["pitch"][0], config["pid_gains"]["yaw"][0]])
+    Ki = np.array([config["pid_gains"]["z"][1], config["pid_gains"]["roll"][1], config["pid_gains"]["pitch"][1], config["pid_gains"]["yaw"][1]])
+    Kd = np.array([config["pid_gains"]["z"][2], config["pid_gains"]["roll"][2], config["pid_gains"]["pitch"][2], config["pid_gains"]["yaw"][2]])
+    Kp_x, Ki_x, Kd_x = config["outer_gains"]["x"]
+    Kp_y, Ki_y, Kd_y = config["outer_gains"]["y"]
     
     if "max_int" in config:
-        max_int = np.array(config["max_int"])
+        if isinstance(config["max_int"], dict):
+            max_int = np.array([config["max_int"]["z"], config["max_int"]["roll"], config["max_int"]["pitch"], config["max_int"]["yaw"], config["max_int"].get("x", 5.0), config["max_int"].get("y", 5.0)])
+        else:
+            max_int = np.array(config["max_int"])
+            if len(max_int) == 4:
+                max_int = np.append(max_int, [5.0, 5.0])
     else:
-        max_int = np.array([2.0, 2.0, 2.0, 2.0])
+        max_int = np.array([2.0, 2.0, 2.0, 2.0, 5.0, 5.0])
     
     if "dof_mask" in config:
         dof_mask = np.array(config["dof_mask"])
@@ -125,6 +131,8 @@ def main():
     
     integral_error_z = 0.0
     integral_error_ang = np.zeros(3)
+    integral_error_body_x = 0.0
+    integral_error_body_y = 0.0
     
     base_thrusts = mixer @ np.array([mass * 9.81, 0.0, 0.0, 0.0])
     actual_motor_pwm = np.sign(base_thrusts) * np.sqrt(np.abs(base_thrusts) / safe_max_thrusts)
@@ -249,14 +257,18 @@ def main():
             wrench_dict[0] = (Kp_x * pos_err_body_x + Kd_x * vel_err_body_x) * mass
             target_pitch = np.radians(TARGET_PITCH_DEG)
         else:
-            accel_x_cmd = Kp_x * pos_err_body_x + Kd_x * vel_err_body_x
+            integral_error_body_x += pos_err_body_x * dt
+            integral_error_body_x = np.clip(integral_error_body_x, -max_int[4], max_int[4])
+            accel_x_cmd = Kp_x * pos_err_body_x + Ki_x * integral_error_body_x + Kd_x * vel_err_body_x
             target_pitch = np.clip(accel_x_cmd / 9.81, -max_tilt, max_tilt)
             
         if dof_mask[1] == 1:
             wrench_dict[1] = (Kp_y * pos_err_body_y + Kd_y * vel_err_body_y) * mass
             target_roll = np.radians(TARGET_ROLL_DEG)
         else:
-            accel_y_cmd = Kp_y * pos_err_body_y + Kd_y * vel_err_body_y
+            integral_error_body_y += pos_err_body_y * dt
+            integral_error_body_y = np.clip(integral_error_body_y, -max_int[5], max_int[5])
+            accel_y_cmd = Kp_y * pos_err_body_y + Ki_y * integral_error_body_y + Kd_y * vel_err_body_y
             target_roll = np.clip(-accel_y_cmd / 9.81, -max_tilt, max_tilt)
         
         cr, sr = np.cos(target_roll * 0.5), np.sin(target_roll * 0.5)
