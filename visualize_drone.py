@@ -46,6 +46,8 @@ def main():
     parser = argparse.ArgumentParser(description="Visualize drone configuration from JSON.")
     parser.add_argument("--model", type=str, required=True, help="Path to MuJoCo XML file.")
     parser.add_argument("--config", type=str, default=None, help="Optional: Path to JSON config file. If not provided, it is auto-inferred from the model name.")
+    parser.add_argument("--random", action="store_true", help="Fly to random targets every 5 seconds.")
+    parser.add_argument("--duration", type=float, default=20.0, help="Flight duration in seconds.")
     args = parser.parse_args()
     
     import os
@@ -123,7 +125,20 @@ def main():
     mujoco.mj_forward(model, data)
     
     dt = model.opt.timestep
-    steps = int(20.0 / dt)
+    flight_duration = args.duration if not args.random else max(20.0, args.duration)
+    steps = int(flight_duration / dt)
+    
+    # Generate random targets if requested
+    num_targets = int(flight_duration / 5.0) + 1
+    random_targets = []
+    if args.random:
+        np.random.seed(int(time.time()))
+        for i in range(num_targets):
+            rx = np.random.uniform(-2.0, 2.0)
+            ry = np.random.uniform(-2.0, 2.0)
+            rz = np.random.uniform(0.5, 3.0)
+            ryaw = np.random.uniform(-np.pi, np.pi)
+            random_targets.append({'pos': np.array([rx, ry, rz]), 'yaw': ryaw})
     
     delay_steps = int((transport_delay_ms / 1000.0) / dt)
     delay_steps = max(1, delay_steps)
@@ -163,7 +178,9 @@ def main():
     target_yaw_deg = TARGET_YAW_DEG
     
     print(f"Loaded Drone Configuration: {num_motors} motors from {args.model}")
-    print("Launching MuJoCo viewer. The flight will take exactly 5 seconds...")
+    print(f"Launching MuJoCo viewer. The flight will take exactly {flight_duration} seconds...")
+    if args.random:
+        print("RANDOM MODE ACTIVE: The drone will fly to a new random position every 5 seconds.")
     
     for step in range(steps):
         t = step * dt
@@ -189,48 +206,70 @@ def main():
             ds = (30*tau**2 - 60*tau**3 + 30*tau**4) / duration
             return p0 + (p1 - p0) * s, (p1 - p0) * ds
             
-        if t < 3.0:
-            pz, vz = min_jerk(t, 3.0, 0.0, 1.0)
-            target_pos = np.array([0.0, 0.0, pz])
-            target_vel = np.array([0.0, 0.0, vz])
-        elif t < 6.0:
-            target_pos = np.array([0.0, 0.0, 1.0])
-        elif t < 10.0:
-            t_seg = t - 6.0
-            px, vx = min_jerk(t_seg, 4.0, 0.0, 0.5)
-            py, vy = min_jerk(t_seg, 4.0, 0.0, 0.5)
-            pyaw, vyaw = min_jerk(t_seg, 4.0, 0.0, np.radians(45.0))
-            target_pos = np.array([px, py, 1.0])
-            target_vel = np.array([vx, vy, 0.0])
-            current_target_yaw = pyaw
-            target_ang_vel = np.array([0.0, 0.0, vyaw])
-        elif t < 14.0:
-            t_seg = t - 10.0
-            px, vx = min_jerk(t_seg, 4.0, 0.5, -0.5)
-            py, vy = min_jerk(t_seg, 4.0, 0.5, 1.0)
-            pz, vz = min_jerk(t_seg, 4.0, 1.0, 2.0)
+        if args.random:
+            target_idx = int(t / 5.0)
+            next_idx = min(target_idx + 1, len(random_targets) - 1)
+            t_phase = t % 5.0
+            
+            p0 = random_targets[target_idx]['pos'] if target_idx == 0 else random_targets[target_idx - 1]['pos']
+            yaw0 = random_targets[target_idx]['yaw'] if target_idx == 0 else random_targets[target_idx - 1]['yaw']
+            
+            p1 = random_targets[target_idx]['pos']
+            yaw1 = random_targets[target_idx]['yaw']
+            
+            # Smooth transition for the first 3 seconds of the 5 second interval
+            px, vx = min_jerk(t_phase, 3.0, p0[0], p1[0])
+            py, vy = min_jerk(t_phase, 3.0, p0[1], p1[1])
+            pz, vz = min_jerk(t_phase, 3.0, p0[2], p1[2])
+            pyaw, vyaw = min_jerk(t_phase, 3.0, yaw0, yaw1)
+            
             target_pos = np.array([px, py, pz])
             target_vel = np.array([vx, vy, vz])
-            current_target_yaw = np.radians(45.0)
+            current_target_yaw = pyaw
+            target_ang_vel = np.array([0.0, 0.0, vyaw])
         else:
-            target_pos = np.array([-0.5, 1.0, 2.0])
-            target_vel = np.zeros(3)
-            current_target_yaw = np.radians(45.0)
-            
-            # Inject chirp perturbation during final hover (14-20s)
-            t_chirp = t - 14.0
-            f0 = 0.5
-            k = 1.0
-            phase = 2 * np.pi * (f0 * t_chirp + 0.5 * k * t_chirp**2)
-            
-            chirp_amplitude = 0.05
-            chirp_pos = chirp_amplitude * np.sin(phase)
-            chirp_vel = chirp_amplitude * 2 * np.pi * (f0 + k * t_chirp) * np.cos(phase)
-            
-            target_pos[0] += chirp_pos
-            target_pos[1] += chirp_pos
-            target_vel[0] += chirp_vel
-            target_vel[1] += chirp_vel
+            if t < 3.0:
+                pz, vz = min_jerk(t, 3.0, 0.0, 1.0)
+                target_pos = np.array([0.0, 0.0, pz])
+                target_vel = np.array([0.0, 0.0, vz])
+            elif t < 6.0:
+                target_pos = np.array([0.0, 0.0, 1.0])
+            elif t < 10.0:
+                t_seg = t - 6.0
+                px, vx = min_jerk(t_seg, 4.0, 0.0, 0.5)
+                py, vy = min_jerk(t_seg, 4.0, 0.0, 0.5)
+                pyaw, vyaw = min_jerk(t_seg, 4.0, 0.0, np.radians(45.0))
+                target_pos = np.array([px, py, 1.0])
+                target_vel = np.array([vx, vy, 0.0])
+                current_target_yaw = pyaw
+                target_ang_vel = np.array([0.0, 0.0, vyaw])
+            elif t < 14.0:
+                t_seg = t - 10.0
+                px, vx = min_jerk(t_seg, 4.0, 0.5, -0.5)
+                py, vy = min_jerk(t_seg, 4.0, 0.5, 1.0)
+                pz, vz = min_jerk(t_seg, 4.0, 1.0, 2.0)
+                target_pos = np.array([px, py, pz])
+                target_vel = np.array([vx, vy, vz])
+                current_target_yaw = np.radians(45.0)
+            else:
+                target_pos = np.array([-0.5, 1.0, 2.0])
+                target_vel = np.zeros(3)
+                current_target_yaw = np.radians(45.0)
+                
+                # Inject chirp perturbation during final hover
+                t_chirp = t - 14.0
+                f0 = 0.5
+                k = 1.0
+                phase = 2 * np.pi * (f0 * t_chirp + 0.5 * k * t_chirp**2)
+                
+                chirp_amplitude = 0.05
+                chirp_pos = chirp_amplitude * np.sin(phase)
+                chirp_vel = chirp_amplitude * 2 * np.pi * (f0 + k * t_chirp) * np.cos(phase)
+                
+                target_pos[0] += chirp_pos
+                target_pos[1] += chirp_pos
+                target_vel[0] += chirp_vel
+                target_vel[1] += chirp_vel
             
         pos = data.qpos[:3]
         quat = data.qpos[3:7]
@@ -371,6 +410,19 @@ def main():
             history_target_pitch.append(np.degrees(target_pitch))
             history_target_yaw.append(np.degrees(current_target_yaw))
             history_thrusts.append(physical_thrusts.copy())
+            
+            if hasattr(viewer, 'user_scn'):
+                viewer.user_scn.ngeom = 1
+                mujoco.mjv_initGeom(
+                    viewer.user_scn.geoms[0],
+                    mujoco.mjtGeom.mjGEOM_SPHERE,
+                    np.zeros(3),
+                    np.zeros(3),
+                    np.zeros(9),
+                    np.array([1, 0, 0, 0.5])
+                )
+                viewer.user_scn.geoms[0].size[0] = 0.05
+                viewer.user_scn.geoms[0].pos[:] = target_pos
             
             viewer.sync()
             time.sleep(0.02)
