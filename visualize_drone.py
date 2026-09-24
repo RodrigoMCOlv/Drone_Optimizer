@@ -45,11 +45,15 @@ def apply_quat(q, v):
 def main():
     parser = argparse.ArgumentParser(description="Visualize drone configuration from JSON.")
     parser.add_argument("--model", type=str, required=True, help="Path to MuJoCo XML file.")
+    parser.add_argument("--config", type=str, default=None, help="Optional: Path to JSON config file. If not provided, it is auto-inferred from the model name.")
     args = parser.parse_args()
     
     import os
-    xml_name = os.path.splitext(os.path.basename(args.model))[0]
-    config_path = os.path.join("output", f"{xml_name}_opt.json")
+    if args.config:
+        config_path = args.config
+    else:
+        xml_name = os.path.splitext(os.path.basename(args.model))[0]
+        config_path = os.path.join("output", f"{xml_name}_opt.json")
     
     try:
         with open(config_path, "r") as f:
