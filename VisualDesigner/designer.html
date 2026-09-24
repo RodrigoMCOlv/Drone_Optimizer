@@ -825,7 +825,7 @@
 
             mjcf += `        </body>\n    </worldbody>\n\n${actuators}    </actuator>\n</mujoco>`;
 
-            sdf += `    <plugin name="drone_optimizer_mjcf" filename="dummy.so">\n      <mujoco_xml>\n${mjcf}\n      </mujoco_xml>\n    </plugin>\n  </model>\n</sdf>`;
+            sdf += `    <mujoco_xml>\n${mjcf}\n    </mujoco_xml>\n  </model>\n</sdf>`;
 
             // Download
             const blob = new Blob([sdf], {type: "text/xml"});
