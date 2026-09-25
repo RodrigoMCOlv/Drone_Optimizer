@@ -119,8 +119,6 @@ def main():
         else:
             dof_mask = np.array([0, 0, 1, 1, 1, 1])
     
-    mass = model.body_mass[drone_body_id]
-    
     max_thrusts = model.actuator_ctrlrange[:, 1]
     min_thrusts = model.actuator_ctrlrange[:, 0]
     safe_max_thrusts = max_thrusts + 1e-6
@@ -129,13 +127,22 @@ def main():
     if len(config["motors"]) != num_motors:
         raise ValueError(f"Mismatch: config was optimized for {len(config['motors'])} motors, but XML model '{args.xml}' has {num_motors} actuators. Please provide the correct --xml argument.")
 
+    B_active_approx = np.linalg.pinv(mixer)
+    max_torque_available = np.sum(np.abs(B_active_approx[1:4, :]) * max_thrusts, axis=1) / 2.0
+
     mujoco.mj_resetData(model, data)
     data.qpos[:3] = [0.0, 0.0, TARGET_POS_Z_START]
     data.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]
     mujoco.mj_forward(model, data)
     
+    nv = model.nv
+    M_dense = np.zeros((nv, nv))
+    mujoco.mj_fullM(model, data, M_dense)
+    mass = M_dense[0, 0]
+    I_body = M_dense[3:6, 3:6]
+    
     dt = model.opt.timestep
-    flight_duration = args.duration if not args.random else max(20.0, args.duration)
+    flight_duration = args.duration
     steps = int(flight_duration / dt)
     
     # Generate random targets if requested
@@ -196,7 +203,7 @@ def main():
     print(f"Launching MuJoCo viewer. The flight will take exactly {flight_duration} seconds...")
     if args.random:
         print("RANDOM MODE ACTIVE: The drone will fly to a new random position every 5 seconds.")
-    
+        
     for step in range(steps):
         t = step * dt
         t_rise = 2.0
@@ -348,12 +355,11 @@ def main():
         integral_error_ang = np.clip(integral_error_ang + ang_err * dt, -max_int[1:4], max_int[1:4])
         desired_ang_accel = Kp[1:]*ang_err + Ki[1:]*integral_error_ang + Kd[1:]*ang_vel_err
         
-        diag_I = model.body_inertia[drone_body_id]
-        iquat = model.body_iquat[drone_body_id]
-        R_inertia = np.zeros(9)
-        mujoco.mju_quat2Mat(R_inertia, iquat)
-        R_inertia = R_inertia.reshape(3, 3)
-        I_body = R_inertia @ np.diag(diag_I) @ R_inertia.T
+        max_ang_accel_limit = (max_torque_available / np.diag(I_body)) * 0.8
+        desired_ang_accel[0] = np.clip(desired_ang_accel[0], -max_ang_accel_limit[0], max_ang_accel_limit[0])
+        desired_ang_accel[1] = np.clip(desired_ang_accel[1], -max_ang_accel_limit[1], max_ang_accel_limit[1])
+        desired_ang_accel[2] = np.clip(desired_ang_accel[2], -max_ang_accel_limit[2], max_ang_accel_limit[2])
+        
         gyro_term = np.cross(ang_vel, I_body @ ang_vel)
         desired_torque_body = I_body @ desired_ang_accel + gyro_term
         
@@ -361,6 +367,8 @@ def main():
         wrench_dict[3] = desired_torque_body[0]
         wrench_dict[4] = desired_torque_body[1]
         wrench_dict[5] = desired_torque_body[2]
+        
+
         
         active_dofs = np.where(dof_mask == 1)[0]
         

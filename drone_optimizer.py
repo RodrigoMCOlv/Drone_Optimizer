@@ -27,9 +27,10 @@ B_pinv = None
 drone_body_id = None
 num_motors = 0
 motors = []
+max_torque_available = None
 
 def init_worker(xml_path):
-    global model, data, drone_config, B_pinv, drone_body_id, num_motors, motors
+    global model, data, drone_config, B_pinv, drone_body_id, num_motors, motors, max_torque_available
     """Ignore SIGINT in worker processes so the main process can handle Ctrl+C cleanly."""
     if multiprocessing.current_process().name != 'MainProcess':
         signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -148,6 +149,10 @@ def init_worker(xml_path):
     active_dofs = np.where(dof_mask == 1)[0]
     B_active = B_full[active_dofs, :]
     B_pinv = np.linalg.pinv(B_active, rcond=1e-4)
+    
+    # Calculate available dynamic torque limits (approximate maximum torque per axis)
+    max_thrusts = model.actuator_ctrlrange[:, 1]
+    max_torque_available = np.sum(np.abs(B_full[3:6, :]) * max_thrusts, axis=1) / 2.0
 
 def quat_mult(q1, q2):
     w1, x1, y1, z1 = q1
@@ -195,15 +200,17 @@ def evaluate_flight(params):
     max_thrusts = model.actuator_ctrlrange[:, 1]
     min_thrusts = model.actuator_ctrlrange[:, 0]
     
-    original_mass = model.body_mass[drone_body_id].copy()
-    original_ipos = model.body_ipos[drone_body_id].copy()
-    
     for target_x, target_y, target_yaw_deg in test_cases:
-        model.body_mass[drone_body_id] = original_mass
-        model.body_ipos[drone_body_id] = original_ipos
-        mujoco.mj_setConst(model, data)
+        mujoco.mj_resetData(model, data)
+        data.qpos[:3] = [0.0, 0.0, TARGET_POS_Z_START]
+        data.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]
+        mujoco.mj_forward(model, data)
         
-        mass = model.body_mass[drone_body_id]
+        nv = model.nv
+        M_dense = np.zeros((nv, nv))
+        mujoco.mj_fullM(model, data, M_dense)
+        mass = M_dense[0, 0]
+        I_body_fixed = M_dense[3:6, 3:6]
         
         mujoco.mj_resetData(model, data)
         data.qpos[:3] = [0.0, 0.0, TARGET_POS_Z_START]
@@ -326,12 +333,7 @@ def evaluate_flight(params):
             
             desired_ang_accel = Kp[1:] * ang_err + Ki[1:] * integral_error_ang + Kd[1:] * ang_vel_err
             
-            diag_I = model.body_inertia[drone_body_id]
-            iquat = model.body_iquat[drone_body_id]
-            R_inertia = np.zeros(9)
-            mujoco.mju_quat2Mat(R_inertia, iquat)
-            R_inertia = R_inertia.reshape(3, 3)
-            I_body = R_inertia @ np.diag(diag_I) @ R_inertia.T
+            I_body = I_body_fixed
             gyro_term = np.cross(ang_vel, I_body @ ang_vel)
             desired_torque_body = I_body @ desired_ang_accel + gyro_term
             
@@ -410,10 +412,6 @@ def evaluate_flight(params):
             
         total_loss += loss 
 
-    model.body_mass[drone_body_id] = original_mass
-    model.body_ipos[drone_body_id] = original_ipos
-    mujoco.mj_setConst(model, data)
-
     return total_loss
 
 def main():
@@ -426,18 +424,18 @@ def main():
     init_worker(args.model)
     
     x0 = [
-        32.96, 12.70, 5.28, 5.45,  # Kp
-        1.67, 0.51, 0.46, 0.69,    # Ki
-        9.63, 1.99, 0.83, 8.08,    # Kd
-        1.45, 0.1, 0.77, 1.45, 0.1, 0.77, # Kp_x, Ki_x, Kd_x, Kp_y, Ki_y, Kd_y
+        150.0, 40.0, 40.0, 40.0,       # Kp (Z, Roll, Pitch, Yaw)
+        1.0, 0.5, 0.5, 0.5,     # Ki
+        30.0, 10.0, 10.0, 10.0,        # Kd
+        1.5, 0.05, 1.5, 1.5, 0.05, 1.5, # Kp_x, Ki_x, Kd_x, Kp_y, Ki_y, Kd_y
         10.0, 10.0, 10.0, 10.0, 5.0, 5.0  # max_int z, r, p, y, x, y
     ]
     
     stds = [
-        10.0, 10.0, 10.0, 10.0,
-        1.0, 1.0, 1.0, 1.0,
-        5.0, 5.0, 5.0, 5.0,
-        1.0, 0.5, 0.5, 1.0, 0.5, 0.5,
+        50.0, 20.0, 20.0, 20.0,
+        0.5, 0.5, 0.5, 0.5,
+        10.0, 5.0, 5.0, 5.0,
+        1.0, 0.1, 1.0, 1.0, 0.1, 1.0,
         5.0, 5.0, 5.0, 5.0, 2.0, 2.0
     ]
     
@@ -604,8 +602,10 @@ def visualize_best_flight(best_params, xml_name):
     max_int = best_params[18:24]
     mixer = B_pinv
     
-    mass = model.body_mass[drone_body_id]
-    
+    max_thrusts = model.actuator_ctrlrange[:, 1]
+    min_thrusts = model.actuator_ctrlrange[:, 0]
+    safe_max_thrusts = max_thrusts + 1e-6
+    max_torque_available = np.sum(np.abs(mixer[1:4, :]) * max_thrusts, axis=1) / 2.0
     max_thrusts = model.actuator_ctrlrange[:, 1]
     min_thrusts = model.actuator_ctrlrange[:, 0]
     safe_max_thrusts = max_thrusts + 1e-6
@@ -614,6 +614,12 @@ def visualize_best_flight(best_params, xml_name):
     data.qpos[:3] = [0.0, 0.0, TARGET_POS_Z_START]
     data.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]
     mujoco.mj_forward(model, data)
+    
+    nv = model.nv
+    M_dense = np.zeros((nv, nv))
+    mujoco.mj_fullM(model, data, M_dense)
+    mass = M_dense[0, 0]
+    I_body = M_dense[3:6, 3:6]
     
     dt = model.opt.timestep
     steps = int(5.0 / dt) 
@@ -646,6 +652,11 @@ def visualize_best_flight(best_params, xml_name):
     target_x = 1.0
     target_y = 0.0
     target_yaw_deg = 45.0
+    
+    mujoco.mj_resetData(model, data)
+    data.qpos[:3] = [0.0, 0.0, TARGET_POS_Z_START]
+    data.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]
+    mujoco.mj_forward(model, data)
     
     for step in range(steps):
         t = step * dt
@@ -731,12 +742,11 @@ def visualize_best_flight(best_params, xml_name):
         integral_error_ang = np.clip(integral_error_ang + ang_err * dt, -max_int[1:4], max_int[1:4])
         desired_ang_accel = Kp[1:]*ang_err + Ki[1:]*integral_error_ang + Kd[1:]*ang_vel_err
         
-        diag_I = model.body_inertia[drone_body_id]
-        iquat = model.body_iquat[drone_body_id]
-        R_inertia = np.zeros(9)
-        mujoco.mju_quat2Mat(R_inertia, iquat)
-        R_inertia = R_inertia.reshape(3, 3)
-        I_body = R_inertia @ np.diag(diag_I) @ R_inertia.T
+        max_ang_accel_limit = (max_torque_available / np.diag(I_body)) * 0.8
+        desired_ang_accel[0] = np.clip(desired_ang_accel[0], -max_ang_accel_limit[0], max_ang_accel_limit[0])
+        desired_ang_accel[1] = np.clip(desired_ang_accel[1], -max_ang_accel_limit[1], max_ang_accel_limit[1])
+        desired_ang_accel[2] = np.clip(desired_ang_accel[2], -max_ang_accel_limit[2], max_ang_accel_limit[2])
+        
         gyro_term = np.cross(ang_vel, I_body @ ang_vel)
         desired_torque_body = I_body @ desired_ang_accel + gyro_term
         
