@@ -469,7 +469,7 @@ def main():
     
     es = cma.CMAEvolutionStrategy(x0, 1.0, options)
     
-    cpu_usage_percent = 60.0
+    cpu_usage_percent = 80.0
     num_cores = multiprocessing.cpu_count()
     if args.workers > 0:
         max_workers = args.workers
@@ -712,7 +712,7 @@ def visualize_best_flight(best_params, xml_name):
         vel_err_body_y = -vel_err[0] * sin_y + vel_err[1] * cos_y
         
         dof_mask = drone_config["dof_mask"]
-        max_tilt = np.radians(20.0)
+        max_tilt = np.radians(45.0)
         wrench_dict = {0: 0.0, 1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0, 5: 0.0}
         
         if dof_mask[0] == 1:
