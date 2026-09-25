@@ -140,7 +140,7 @@ def init_worker(xml_path):
             "pos": pos_rel.tolist(),
             "z_axis": z_axis.tolist(),
             "c_m": c_m,
-            "spin": 1 if c_m > 0 else -1,
+            "spin": -1 if c_m > 0 else 1,
             "inertia": prop_inertia,
             "rpms": rpms,
             "thrusts": thrusts
@@ -320,13 +320,16 @@ def evaluate_flight(params):
             if q_err[0] < 0:
                 q_err = -q_err
             ang_err = 2.0 * q_err[1:]
-            ang_vel_err = target_ang_vel - ang_vel
+            body_mat = data.xmat[drone_body_id].reshape(3, 3)
+            target_ang_vel_body = body_mat.T @ target_ang_vel
+            ang_vel_err = target_ang_vel_body - ang_vel
             
             integral_error_z += pos_err[2] * dt
             integral_error_z = np.clip(integral_error_z, -max_int[0], max_int[0])
             
             desired_accel_z = Kp[0] * pos_err[2] + Ki[0] * integral_error_z + Kd[0] * vel_err[2]
-            desired_force_z = (desired_accel_z + 9.81) * mass
+            up_world = body_mat @ np.array([0.0, 0.0, 1.0])
+            desired_force_z = (desired_accel_z + 9.81) * mass / max(0.5, up_world[2])
             
             integral_error_ang += ang_err * dt
             integral_error_ang = np.clip(integral_error_ang, -max_int[1:4], max_int[1:4])
@@ -337,7 +340,7 @@ def evaluate_flight(params):
             gyro_term = np.cross(ang_vel, I_body @ ang_vel)
             desired_torque_body = I_body @ desired_ang_accel + gyro_term
             
-            wrench_dict[2] = (desired_accel_z + 9.81) * mass
+            wrench_dict[2] = desired_force_z
             wrench_dict[3] = desired_torque_body[0]
             wrench_dict[4] = desired_torque_body[1]
             wrench_dict[5] = desired_torque_body[2]
@@ -389,7 +392,9 @@ def evaluate_flight(params):
                 m = motors[i]
                 if m["inertia"] > 0 and len(m["rpms"]) >= 2:
                     # np.interp requires strictly increasing x, thrusts array from XML should be increasing
-                    current_rpm = np.interp(abs(physical_thrusts[i]), m["thrusts"], m["rpms"])
+                    target_rpm = np.interp(abs(physical_thrusts[i]), m["thrusts"], m["rpms"])
+                    alpha_rpm = dt / (0.02 + dt)
+                    current_rpm = (1.0 - alpha_rpm) * prev_rpms[i] + alpha_rpm * target_rpm
                     rpm_diff = current_rpm - prev_rpms[i]
                     prev_rpms[i] = current_rpm
                     
@@ -405,10 +410,16 @@ def evaluate_flight(params):
                 
             mujoco.mj_step(model, data)
             
-            loss += (np.sum(pos_err[:2]**2)*10.0 + pos_err[2]**2 + np.sum(ang_err**2) * 20.0 + np.sum(ang_vel_err**2) * 2.0) * dt
+            # Heavily penalize position error to force the drone to fly to the target
+            # Reduce attitude penalty so it doesn't just hover safely to avoid attitude loss
+            loss += (np.sum(pos_err[:2]**2)*100.0 + pos_err[2]**2 * 10.0 + np.sum(ang_err**2) * 5.0 + np.sum(ang_vel_err**2) * 0.5) * dt
             # Penalize high-frequency chatter but don't penalize smooth maneuvering
             loss += np.sum((thrusts - prev_thrusts)**2) * 0.05
             prev_thrusts = thrusts
+            
+        # Add a massive penalty if the final position is far from the target
+        final_dist = np.linalg.norm(pos_err[:2])
+        loss += final_dist * 1000.0
             
         total_loss += loss 
 
@@ -418,6 +429,7 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description="Universal UAV Control Optimizer")
     parser.add_argument("--model", type=str, required=True, help="Path to MuJoCo XML")
+    parser.add_argument("--workers", type=int, default=0, help="Number of workers (default: dynamic based on cores)")
     args = parser.parse_args()
 
     # Initialize the globals for the main process so it can print/save matrix and visualize correctly
@@ -460,7 +472,10 @@ def main():
     
     cpu_usage_percent = 60.0
     num_cores = multiprocessing.cpu_count()
-    max_workers = max(1, int(num_cores * (cpu_usage_percent / 100.0)))
+    if args.workers > 0:
+        max_workers = args.workers
+    else:
+        max_workers = max(1, int(num_cores * (cpu_usage_percent / 100.0)))
     
     loss_history_best = []
     loss_history_avg = []
@@ -733,11 +748,16 @@ def visualize_best_flight(best_params, xml_name):
         q_err = quat_mult(quat_conj(quat), target_quat)
         if q_err[0] < 0: q_err = -q_err
         ang_err = 2.0 * q_err[1:]
-        ang_vel_err = target_ang_vel - ang_vel
+        
+        body_mat = data.xmat[drone_body_id].reshape(3, 3)
+        target_ang_vel_body = body_mat.T @ target_ang_vel
+        ang_vel_err = target_ang_vel_body - ang_vel
         
         integral_error_z = np.clip(integral_error_z + pos_err[2] * dt, -max_int[0], max_int[0])
         desired_accel_z = Kp[0]*pos_err[2] + Ki[0]*integral_error_z + Kd[0]*vel_err[2]
-        desired_force_z = (desired_accel_z + 9.81) * mass
+        
+        up_world = body_mat @ np.array([0.0, 0.0, 1.0])
+        desired_force_z = (desired_accel_z + 9.81) * mass / max(0.5, up_world[2])
         
         integral_error_ang = np.clip(integral_error_ang + ang_err * dt, -max_int[1:4], max_int[1:4])
         desired_ang_accel = Kp[1:]*ang_err + Ki[1:]*integral_error_ang + Kd[1:]*ang_vel_err
@@ -750,7 +770,7 @@ def visualize_best_flight(best_params, xml_name):
         gyro_term = np.cross(ang_vel, I_body @ ang_vel)
         desired_torque_body = I_body @ desired_ang_accel + gyro_term
         
-        wrench_dict[2] = (desired_accel_z + 9.81) * mass
+        wrench_dict[2] = desired_force_z
         wrench_dict[3] = desired_torque_body[0]
         wrench_dict[4] = desired_torque_body[1]
         wrench_dict[5] = desired_torque_body[2]

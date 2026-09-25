@@ -346,11 +346,15 @@ def main():
         q_err = quat_mult(quat_conj(quat), target_quat)
         if q_err[0] < 0: q_err = -q_err
         ang_err = 2.0 * q_err[1:]
-        ang_vel_err = target_ang_vel - ang_vel
+        body_mat = data.xmat[drone_body_id].reshape(3, 3)
+        target_ang_vel_body = body_mat.T @ target_ang_vel
+        ang_vel_err = target_ang_vel_body - ang_vel
         
         integral_error_z = np.clip(integral_error_z + pos_err[2] * dt, -max_int[0], max_int[0])
         desired_accel_z = Kp[0]*pos_err[2] + Ki[0]*integral_error_z + Kd[0]*vel_err[2]
-        desired_force_z = (desired_accel_z + 9.81) * mass
+        
+        up_world = body_mat @ np.array([0.0, 0.0, 1.0])
+        desired_force_z = (desired_accel_z + 9.81) * mass / max(0.5, up_world[2])
         
         integral_error_ang = np.clip(integral_error_ang + ang_err * dt, -max_int[1:4], max_int[1:4])
         desired_ang_accel = Kp[1:]*ang_err + Ki[1:]*integral_error_ang + Kd[1:]*ang_vel_err
@@ -363,7 +367,7 @@ def main():
         gyro_term = np.cross(ang_vel, I_body @ ang_vel)
         desired_torque_body = I_body @ desired_ang_accel + gyro_term
         
-        wrench_dict[2] = (desired_accel_z + 9.81) * mass
+        wrench_dict[2] = desired_force_z
         wrench_dict[3] = desired_torque_body[0]
         wrench_dict[4] = desired_torque_body[1]
         wrench_dict[5] = desired_torque_body[2]
@@ -415,12 +419,15 @@ def main():
         for i in range(num_motors):
             m = config["motors"][i]
             if m.get("inertia", 0) > 0 and len(m.get("rpms", [])) >= 2:
-                current_rpm = np.interp(abs(physical_thrusts[i]), m["thrusts"], m["rpms"])
+                target_rpm = np.interp(abs(physical_thrusts[i]), m["thrusts"], m["rpms"])
+                alpha_rpm = dt / (0.02 + dt)
+                current_rpm = (1.0 - alpha_rpm) * prev_rpms[i] + alpha_rpm * target_rpm
                 rpm_diff = current_rpm - prev_rpms[i]
                 prev_rpms[i] = current_rpm
                 
                 alpha = (rpm_diff * 2.0 * np.pi / 60.0) / dt
-                t_jerk = - m["inertia"] * alpha * m.get("spin", 1)
+                actual_spin = -1 if m.get("c_m", 0) > 0 else 1
+                t_jerk = - m.get("inertia", 0) * alpha * actual_spin
                 transient_torque_z += t_jerk
                 
         if transient_torque_z != 0.0:
