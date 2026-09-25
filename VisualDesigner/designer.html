@@ -245,7 +245,7 @@
             <div style="display: flex; gap: 10px; font-size: 0.9rem;">
                 <label><input type="checkbox" id="g_sensor_imu" checked> IMU</label>
                 <label><input type="checkbox" id="g_sensor_baro" checked> Barometer</label>
-                <label><input type="checkbox" id="g_sensor_mag" checked> Mag</label>
+                <label><input type="checkbox" id="g_sensor_mag" checked> Compass (Mag)</label>
                 <label><input type="checkbox" id="g_sensor_gps" checked> GPS</label>
             </div>
         </div>
@@ -749,6 +749,7 @@
         <always_on>1</always_on>
         <update_rate>50</update_rate>
         <air_pressure>
+          <reference_altitude>0</reference_altitude>
           <pressure>
             <noise type="gaussian">
               <mean>0</mean>
@@ -762,7 +763,17 @@
                 sdf += `      <sensor name="magnetometer_sensor" type="magnetometer">
         <always_on>1</always_on>
         <update_rate>100</update_rate>
-        <magnetometer/>
+        <magnetometer>
+          <x>
+            <noise type="gaussian"><mean>0</mean><stddev>1e-5</stddev></noise>
+          </x>
+          <y>
+            <noise type="gaussian"><mean>0</mean><stddev>1e-5</stddev></noise>
+          </y>
+          <z>
+            <noise type="gaussian"><mean>0</mean><stddev>1e-5</stddev></noise>
+          </z>
+        </magnetometer>
       </sensor>\n`;
             }
             if (document.getElementById('g_sensor_gps').checked) {

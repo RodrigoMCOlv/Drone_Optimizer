@@ -411,10 +411,9 @@ def evaluate_flight(params):
             mujoco.mj_step(model, data)
             
             # Heavily penalize position error to force the drone to fly to the target
-            # Reduce attitude penalty so it doesn't just hover safely to avoid attitude loss
-            loss += (np.sum(pos_err[:2]**2)*100.0 + pos_err[2]**2 * 10.0 + np.sum(ang_err**2) * 5.0 + np.sum(ang_vel_err**2) * 0.5) * dt
-            # Penalize high-frequency chatter but don't penalize smooth maneuvering
-            loss += np.sum((thrusts - prev_thrusts)**2) * 0.05
+            loss += (np.sum(pos_err[:2]**2)*300.0 + pos_err[2]**2 * 50.0 + np.sum(ang_err[:2]**2) * 50.0 + ang_err[2]**2 * 10.0 + np.sum(ang_vel_err**2) * 5.0) * dt
+            # Heavily penalize high-frequency chatter to smooth motor actuation
+            loss += np.sum((thrusts - prev_thrusts)**2) * 5.0
             prev_thrusts = thrusts
             
         # Add a massive penalty if the final position is far from the target

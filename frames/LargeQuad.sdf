@@ -29,15 +29,33 @@
           </linear_acceleration>
         </imu>
       </sensor>
-      <sensor name="altimeter" type="altimeter">
+      <sensor name="air_pressure" type="air_pressure">
         <always_on>1</always_on>
         <update_rate>50</update_rate>
-        <altimeter/>
+        <air_pressure>
+          <reference_altitude>0</reference_altitude>
+          <pressure>
+            <noise type="gaussian">
+              <mean>0</mean>
+              <stddev>0.01</stddev>
+            </noise>
+          </pressure>
+        </air_pressure>
       </sensor>
-      <sensor name="magnetometer" type="magnetometer">
+      <sensor name="mag" type="magnetometer">
         <always_on>1</always_on>
         <update_rate>100</update_rate>
-        <magnetometer/>
+        <magnetometer>
+          <x>
+            <noise type="gaussian"><mean>0</mean><stddev>1e-5</stddev></noise>
+          </x>
+          <y>
+            <noise type="gaussian"><mean>0</mean><stddev>1e-5</stddev></noise>
+          </y>
+          <z>
+            <noise type="gaussian"><mean>0</mean><stddev>1e-5</stddev></noise>
+          </z>
+        </magnetometer>
       </sensor>
       <sensor name="gps" type="navsat">
         <always_on>1</always_on>
